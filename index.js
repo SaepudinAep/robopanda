@@ -1,4 +1,14 @@
-import { supabase } from "./config.js";
+/**
+ * Project: Robopanda Client (Public/Student)
+ * File: index.js
+ * Update: Fix UUID Support for Homepage Menu
+ */
+
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+import { supabaseUrl, supabaseKey } from './config.js';
+
+// Inisialisasi Supabase Manual (Konsisten dengan Admin)
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- 1. STATE MANAGEMENT ---
 let currentUser = null;
@@ -38,35 +48,54 @@ async function initAuthLogic() {
             userProfile = null;
             updateAuthUI();
             renderNavbar(); 
+            // Jika sedang buka galeri (protected), lempar balik ke explorer
             if (currentActiveModule === 'gallery') loadModule('explorer');
         }
     });
 }
 
 // =========================================
-// 🟢 SEKTOR DATA (Ambil Isi Menu, Bukan Kategori)
+// 🟢 SEKTOR DATA (FIX UUID LOGIC)
 // =========================================
 async function fetchPublicMenus() {
-    console.log("🔍 Mencari menu dengan kategori: 'homepage'...");
+    console.log("🔍 Mencari menu Homepage...");
 
-    const { data, error } = await supabase
-        .from('app_menus')
-        .select('*')
-        .eq('category', 'homepage') // SUDAH DIPERBAIKI: pakai 'e' (homepage)
-        .eq('is_active', true)
-        .order('order_index', { ascending: true });
+    try {
+        // [LANGKAH 1] Ambil ID Kategori 'homepage' (Karena DB sekarang pakai UUID)
+        const { data: catData, error: catError } = await supabase
+            .from('menu_categories')
+            .select('id')
+            .eq('category_key', 'homepage')
+            .single();
 
-    if (error) {
-        console.error("❌ Error Supabase:", error.message);
-        return;
-    }
+        if (catError || !catData) {
+            console.warn("⚠️ Kategori 'homepage' tidak ditemukan di database.");
+            return;
+        }
 
-    if (!data || data.length === 0) {
-        console.warn("⚠️ Data kosong! Pastikan kolom 'category' di DB tertulis 'homepage'");
-    } else {
-        publicMenus = data;
-        console.log("✅ Berhasil memuat menu:", publicMenus);
-        renderNavbar();
+        // [LANGKAH 2] Ambil Menu berdasarkan UUID Kategori
+        const { data, error } = await supabase
+            .from('app_menus')
+            .select('*')
+            .eq('category', catData.id) // <--- Filter pakai UUID
+            .eq('is_active', true)
+            .order('order_index', { ascending: true });
+
+        if (error) {
+            console.error("❌ Error Supabase:", error.message);
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            console.warn("⚠️ Menu kosong untuk kategori Homepage.");
+        } else {
+            publicMenus = data;
+            console.log("✅ Berhasil memuat menu:", publicMenus);
+            renderNavbar();
+        }
+
+    } catch (err) {
+        console.error("System Error:", err);
     }
 }
 
@@ -75,7 +104,6 @@ function renderNavbar() {
     if (!nav) return;
 
     nav.innerHTML = publicMenus.map(menu => {
-        // Karena di database kolom 'route' isinya sudah 'explorer' atau 'gallery'
         const moduleKey = menu.route; 
         
         return `
@@ -89,6 +117,7 @@ function renderNavbar() {
     nav.querySelectorAll('.tab-item').forEach(btn => {
         btn.onclick = () => {
             const mod = btn.dataset.module;
+            // Proteksi Gallery (Contoh logic)
             if (mod === 'gallery' && !currentUser) {
                 showLoginModal();
             } else {
@@ -100,7 +129,7 @@ function renderNavbar() {
 }
 
 // =========================================
-// 🟢 MODULE LOADER
+// 🟢 MODULE LOADER (Dengan Cache Busting)
 // =========================================
 
 async function loadModule(name) {
@@ -108,24 +137,35 @@ async function loadModule(name) {
     const contentArea = document.getElementById('app-content');
     if (!contentArea) return;
 
-    contentArea.innerHTML = `<div style="text-align:center; padding:100px;">⏳ Menyiapkan ${name}...</div>`;
+    // Loading State
+    contentArea.innerHTML = `<div style="text-align:center; padding:100px; color:#666;">⏳ Menyiapkan ${name}...</div>`;
 
     try {
-        // Memanggil file berdasarkan nama moduleKey (contoh: explorer-module.js)
-        const module = await import(`./${name}-module.js`);
+        // Import Dinamis dengan Timestamp agar file selalu fresh (Anti-Cache)
+        const module = await import(`./${name}-module.js?t=${Date.now()}`);
         
+        contentArea.innerHTML = ''; // Bersihkan loading
+
         if (module.initExplorer && name === 'explorer') {
             await module.initExplorer(contentArea, userProfile);
         } else if (module.init) {
             await module.init(contentArea, userProfile);
+        } else {
+            // Fallback jika tidak ada fungsi init standar
+            console.warn(`Modul ${name} tidak memiliki fungsi init standar.`);
         }
     } catch (err) {
         console.error("Critical Error Load Modul:", err);
-        contentArea.innerHTML = `<div style="padding:50px; text-align:center; color:red;">Gagal memuat modul ${name}.</div>`;
+        contentArea.innerHTML = `
+            <div style="padding:50px; text-align:center; color:red;">
+                <h3>Gagal memuat modul ${name}</h3>
+                <p>Pastikan file <b>${name}-module.js</b> ada.</p>
+                <small>${err.message}</small>
+            </div>`;
     }
 }
 
-// --- Fungsi Auth UI & Helpers Tetap Sama ---
+// --- Fungsi Auth UI & Helpers ---
 
 async function refreshUserProfile() {
     if (!currentUser) return;
@@ -161,10 +201,23 @@ async function handleLogin() {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     const btn = document.getElementById('btn-do-login');
+    
     if (!email || !password) return alert("Data tidak lengkap!");
+    
     btn.disabled = true;
+    btn.innerText = "Memproses...";
+    
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { alert(error.message); btn.disabled = false; } else { hideLoginModal(); }
+    
+    if (error) { 
+        alert(error.message); 
+        btn.disabled = false; 
+        btn.innerText = "Login";
+    } else { 
+        hideLoginModal(); 
+        btn.disabled = false;
+        btn.innerText = "Login";
+    }
 }
 
 function setupAuthListeners() {
@@ -173,8 +226,17 @@ function setupAuthListeners() {
     const close = document.getElementById('btn-close-login');
     if (close) close.onclick = hideLoginModal;
 }
-function showLoginModal() { document.getElementById('modal-login').style.display = 'flex'; }
-function hideLoginModal() { document.getElementById('modal-login').style.display = 'none'; }
+
+function showLoginModal() { 
+    const modal = document.getElementById('modal-login');
+    if(modal) modal.style.display = 'flex'; 
+}
+
+function hideLoginModal() { 
+    const modal = document.getElementById('modal-login');
+    if(modal) modal.style.display = 'none'; 
+}
+
 function setActiveTab(btn) {
     document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
