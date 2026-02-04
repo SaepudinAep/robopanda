@@ -3,96 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Robopanda Robotic</title>
+  <title>Robopanda Robotic - Official Website</title>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style_explorer.css" />
+  
+  <style>
+    /* Tambahan kecil untuk mendukung Shell Dinamis */
+    #app-content { min-height: 60vh; }
+    .nav-user-area { display: flex; align-items: center; gap: 10px; }
+    .btn-login-trigger { 
+      background: var(--primary); color: white; padding: 8px 16px; 
+      border-radius: var(--radius-full); font-weight: bold; font-size: 0.8rem;
+    }
+    /* Modal Login Styling sesuai Vibe Robopanda */
+    .login-modal {
+      display: none; position: fixed; inset: 0; z-index: var(--z-modal);
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
+      justify-content: center; align-items: center;
+    }
+    .login-box {
+      background: white; padding: 30px; border-radius: var(--radius-2xl);
+      width: 100%; max-width: 400px; box-shadow: var(--shadow-2xl);
+    }
+  </style>
 </head>
 <body>
 
-  <!-- HEADER -->
-  <header class="explorer-header">
-    <div class="header-top">
-      <div class="logo-area">
-        <img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" alt="Logo Robopanda" class="main-logo" />
-        <div class="logo-text"></div>
-      </div>
-      <div class="search-box">
-        <input type="text" id="searchMateri" placeholder="Cari misi robotik..." />
-        <span class="search-btn">🔍</span>
-      </div>
+<header class="explorer-header">
+  <div class="header-top" style="justify-content: space-between;">
+    <div class="logo-area" onclick="window.location.reload()" style="cursor:pointer">
+      <img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" alt="Logo Robopanda" class="main-logo" />
     </div>
-
-    <nav class="level-tabs" id="levelTabs">
-      <button class="tab-item active" data-level="all">Semua</button>
-    </nav>
-  </header>
-
-  <!-- MAIN CONTENT -->
-  <main class="explorer-main">
-    <section class="feed-section" id="live-missions-wrapper">
-      <div class="section-header">
-        <h2>🚀 Misi Aktif <span class="badge-live">LIVE</span></h2>
-        <p>Materi yang sedang dipelajari di kelas saat ini</p>
+    
+    <div class="nav-user-area" id="auth-area">
       </div>
-      <div class="horizontal-scroll" id="live-missions-list">
-        <div class="loading-placeholder">Memuat misi aktif...</div>
-      </div>
-    </section>
+  </div>
 
-    <div id="level-rows-container"></div>
+  <div class="header-nav-row">
+    <nav class="main-nav-pills" id="main-nav-categories">
+      </nav>
+  </div>
+</header>
+
+  <main class="explorer-main" id="app-content">
+    <div style="text-align:center; padding: 50px;">
+        <div class="loading-placeholder">Menyiapkan petualangan robotik...</div>
+    </div>
   </main>
 
-  <!-- MODAL -->
-  <div class="modal-overlay" id="modal-explorer">
-    <div class="modal-content">
-      <button class="btn-close-modal" id="closeModal">&times; Tutup</button>
-
-      <div class="modal-hero">
-        <img id="modal-image" src="" alt="Project Image" />
-        <img id="modal-watermark" src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" class="modal-watermark" alt="Robopanda Watermark" />
-        <div class="modal-overlay-info">
-          <span class="badge-level" id="modal-level">LEVEL</span>
-          <h2 id="modal-title" class="modal-title">Judul Materi</h2>
-          <span class="date-info" id="modal-date">Terakhir diajarkan: -</span>
-        </div>
+  <div class="login-modal" id="modal-login">
+    <div class="login-box">
+      <h2 style="font-family: var(--font-family-heading); color: var(--primary); margin-bottom: 20px;">Halo Sahabat Panda! 🐼</h2>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display:block; font-size: 0.8rem; margin-bottom: 5px;">Email Terdaftar</label>
+        <input type="email" id="login-email" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
       </div>
-
-      <div class="modal-body">
-        <div class="content-block">
-          <h3>Ringkasan Misi</h3>
-          <p id="modal-description"></p>
-        </div>
-        <div class="content-block">
-          <h3>Rencana Pembelajaran</h3>
-          <div id="modal-detail" class="detail-text"></div>
-        </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label style="display:block; font-size: 0.8rem; margin-bottom: 5px;">Password</label>
+        <input type="password" id="login-password" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
       </div>
+      <button id="btn-do-login" class="btn-ig-premium" style="width:100%; border:none;">Masuk ke Galeri</button>
+      <button id="btn-close-login" style="width:100%; margin-top: 10px; color: #999; font-size: 0.8rem;">Nanti Saja</button>
     </div>
   </div>
 
-  <!-- FOOTER -->
   <footer class="explorer-footer">
-    <div class="cta-container">
-      <div class="cta-card">
-        <div class="cta-content">
-          <h3>Mau Lihat Robot Lainnya? 🤖</h3>
-          <p>Ikuti perjalanan seru kami membangun berbagai robot unik setiap harinya!</p>
-        </div>
-        <a href="https://www.instagram.com/robopandarobotic/" target="_blank" class="btn-ig-premium">
-          <svg class="icon-ig-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
-            <path d="M224.1 141c-63.6 0-114.9 51.3-114.9 114.9s51.3 114.9 114.9 114.9S339 319.5 339 255.9 287.7 141 224.1 141zm0 189.6c-41.1 0-74.7-33.5-74.7-74.7s33.5-74.7 74.7-74.7 74.7 33.5 74.7 74.7-33.6 74.7-74.7 74.7zm146.4-194.3c0 14.9-12 26.8-26.8 26.8-14.9 0-26.8-12-26.8-26.8s12-26.8 26.8-26.8 26.8 12 26.8 26.8zm76.1 27.2c-1.7-35.9-9.9-67.7-36.2-93.9-26.2-26.2-58-34.4-93.9-36.2-37-2.1-147.9-2.1-184.9 0-35.8 1.7-67.6 9.9-93.9 36.1s-34.4 58-36.2 93.9c-2.1 37-2.1 147.9 0 184.9 1.7 35.9 9.9 67.7 36.2 93.9s58 34.4 93.9 36.2c37 2.1 147.9 2.1 184.9 0 35.9-1.7 67.7-9.9 93.9-36.2 26.2-26.2 34.4-58 36.2-93.9 2.1-37 2.1-147.8 0-184.8zM398.8 388c-7.8 19.6-22.9 34.7-42.6 42.6-29.5 11.7-99.5 9-132.1 9s-102.7 2.6-132.1-9c-19.6-7.8-34.7-22.9-42.6-42.6-11.7-29.5-9-99.5-9-132.1s-2.6-102.7 9-132.1c7.8-19.6 22.9-34.7 42.6-42.6 29.5-11.7 99.5-9 132.1-9s102.7-2.6 132.1 9c19.6 7.8 34.7 22.9 42.6 42.6 11.7 29.5 9 99.5 9 132.1s2.7 102.7-9 132.1z"/>
-          </svg>
-          Follow @robopandarobotic
-        </a>
-      </div>
-
-      <div class="footer-bottom">
-        <p>&copy; 2026 Robopanda Robotic Curriculum.</p>
-        <small>Let's build our dream robots</small>
-      </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Robopanda Robotic Curriculum.</p>
     </div>
   </footer>
 
-  <script type="module" src="explorer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="index.js"></script>
 </body>
 </html>

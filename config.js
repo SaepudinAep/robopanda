@@ -14,3 +14,5 @@ export const cloudinaryConfig = {
         return `https://api.cloudinary.com/v1_1/${this.cloudName}/image/upload`;
     }
 };
+
+///https://aedtrwpomswdqxarvsrg.supabase.co/functions/v1/add-user
