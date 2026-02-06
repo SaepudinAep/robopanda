@@ -5,25 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Robopanda Robotic - Official Website</title>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style_explorer.css" />
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="assets/css/style_explorer.css" />
   
   <style>
-    /* Tambahan kecil untuk mendukung Shell Dinamis */
     #app-content { min-height: 60vh; }
     .nav-user-area { display: flex; align-items: center; gap: 10px; }
     .btn-login-trigger { 
-      background: var(--primary); color: white; padding: 8px 16px; 
-      border-radius: var(--radius-full); font-weight: bold; font-size: 0.8rem;
+      background: #3b82f6; color: white; padding: 8px 16px; 
+      border-radius: 50px; font-weight: bold; font-size: 0.8rem; border: none; cursor: pointer;
     }
-    /* Modal Login Styling sesuai Vibe Robopanda */
     .login-modal {
-      display: none; position: fixed; inset: 0; z-index: var(--z-modal);
+      display: none; position: fixed; inset: 0; z-index: 9999;
       background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
       justify-content: center; align-items: center;
     }
     .login-box {
-      background: white; padding: 30px; border-radius: var(--radius-2xl);
-      width: 100%; max-width: 400px; box-shadow: var(--shadow-2xl);
+      background: white; padding: 30px; border-radius: 16px;
+      width: 100%; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
     }
   </style>
 </head>
@@ -34,26 +35,23 @@
     <div class="logo-area" onclick="window.location.reload()" style="cursor:pointer">
       <img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" alt="Logo Robopanda" class="main-logo" />
     </div>
-    
-    <div class="nav-user-area" id="auth-area">
-      </div>
+    <div class="nav-user-area" id="auth-area"></div>
   </div>
 
   <div class="header-nav-row">
-    <nav class="main-nav-pills" id="main-nav-categories">
-      </nav>
+    <nav class="main-nav-pills" id="main-nav-categories"></nav>
   </div>
 </header>
 
   <main class="explorer-main" id="app-content">
     <div style="text-align:center; padding: 50px;">
-        <div class="loading-placeholder">Menyiapkan petualangan robotik...</div>
+        <div class="loading-placeholder"><i class="fa-solid fa-spinner fa-spin"></i> Menyiapkan petualangan robotik...</div>
     </div>
   </main>
 
   <div class="login-modal" id="modal-login">
     <div class="login-box">
-      <h2 style="font-family: var(--font-family-heading); color: var(--primary); margin-bottom: 20px;">Halo Sahabat Panda! 🐼</h2>
+      <h2 style="font-family: 'Fredoka One', cursive; color: #3b82f6; margin-bottom: 20px;">Halo Sahabat Panda! 🐼</h2>
       <div class="form-group" style="margin-bottom: 15px;">
         <label style="display:block; font-size: 0.8rem; margin-bottom: 5px;">Email Terdaftar</label>
         <input type="email" id="login-email" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
@@ -62,8 +60,8 @@
         <label style="display:block; font-size: 0.8rem; margin-bottom: 5px;">Password</label>
         <input type="password" id="login-password" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
       </div>
-      <button id="btn-do-login" class="btn-ig-premium" style="width:100%; border:none;">Masuk ke Galeri</button>
-      <button id="btn-close-login" style="width:100%; margin-top: 10px; color: #999; font-size: 0.8rem;">Nanti Saja</button>
+      <button id="btn-do-login" class="btn-login-trigger" style="width:100%;">Masuk Sekarang</button>
+      <button id="btn-close-login" style="width:100%; margin-top: 10px; background:transparent; border:none; color: #999; font-size: 0.8rem; cursor:pointer;">Nanti Saja</button>
     </div>
   </div>
 
@@ -73,7 +71,6 @@
     </div>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="index.js"></script>
+  <script type="module" src="assets/js/index.js"></script>
 </body>
 </html>
