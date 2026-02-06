@@ -1,4 +1,15 @@
-import { supabase } from "./config.js";
+/**
+ * Project: Explorer Module
+ * Location: modules/explorer-module.js
+ * Fix: Menambahkan inisialisasi client Supabase agar data bisa dimuat.
+ */
+
+// 1. IMPORT LIBRARY (WAJIB ADA)
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+import { supabaseUrl, supabaseKey } from '../assets/js/config.js';
+
+// 2. INISIALISASI CLIENT (INI YANG SEBELUMNYA HILANG)
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- State Management (Tetap Asli) ---
 let allLevels = [];
@@ -68,6 +79,7 @@ export async function initExplorer(container) {
 // =========================================
 
 async function loadInitialData() {
+    // Variable 'supabase' sekarang sudah dikenali berkat fix di baris 12
     const { data: levels } = await supabase.from("levels").select("*").order("kode");
     allLevels = levels || [];
     
