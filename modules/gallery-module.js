@@ -1,7 +1,8 @@
 /**
  * Project: Robopanda Client (Public/Student)
  * File: modules/gallery-module.js
- * Version: 4.5 - Dual-Column Session Support (Fix Private Content)
+ * Version: 4.6 - School Name in Dropdown (UX Fix)
+ * Format: Plain Text (Huawei T10s Anti-Crash)
  */
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -63,7 +64,7 @@ function getFormattedCaption(index) {
     return `robopanda_${cleanDate}_${cleanMateri}_${noUrut}`;
 }
 
-// --- 3. SECURITY & DATA ---
+// --- 3. SECURITY & DATA (UPDATED: SCHOOL NAME IN DROPDOWN) ---
 async function loadClassesOrGroups() {
     const classSelect = document.getElementById('class-select');
     const wrapper = document.getElementById('class-filter-wrapper');
@@ -80,8 +81,9 @@ async function loadClassesOrGroups() {
     wrapper.style.display = 'block';
     classSelect.innerHTML = '<option disabled selected>Memuat...</option>';
 
+    // UPDATE: Menambahkan join schools(name) untuk konteks sekolah
     let query = currentContext === 'school' 
-        ? supabase.from('classes').select('id, name, school_id') 
+        ? supabase.from('classes').select('id, name, schools(name)') 
         : supabase.from('class_private').select('id, name, group_id');
 
     if (userProfile.role === 'pic') {
@@ -93,7 +95,11 @@ async function loadClassesOrGroups() {
     const { data } = await query.order('name');
     if (data && data.length > 0) {
         classSelect.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
-            data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            data.map(c => {
+                // Tambahkan keterangan sekolah jika mode SCHOOL
+                const schoolSuffix = currentContext === 'school' ? ` (${c.schools?.name || 'Umum'})` : '';
+                return `<option value="${c.id}">${c.name}${schoolSuffix}</option>`;
+            }).join('');
     }
 }
 
@@ -115,7 +121,6 @@ async function loadSessions() {
 }
 
 async function loadGalleryContent() {
-    // FIX: Tentukan kolom pembanding berdasarkan konteks saat ini
     const targetCol = currentContext === 'school' ? 'pertemuan_id' : 'pertemuan_private_id';
 
     let query = supabase.from('gallery_contents')
@@ -283,7 +288,7 @@ function injectStyles() {
     const s = document.createElement('style');
     s.id = 'ug-css';
     s.textContent = `
-        .ug-container { padding: 8px; max-width: 1000px; margin: 0 auto; }
+        .ug-container { padding: 8px; max-width: 1000px; margin: 0 auto; font-family: 'Poppins', sans-serif; }
         .ug-nav-switcher { display: flex; gap: 5px; margin-bottom: 10px; }
         .nav-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.8rem; font-weight: bold; background: white; }
         .nav-btn.active { background: #4d97ff; color: white; border-color: #4d97ff; }
