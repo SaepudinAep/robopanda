@@ -1,7 +1,7 @@
 /**
  * Project: Robopanda Client (Public/Student)
  * File: modules/gallery-module.js
- * Version: 4.4 - Grid Optimization & Professional Captioning
+ * Version: 4.5 - Dual-Column Session Support (Fix Private Content)
  */
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -49,16 +49,13 @@ function getFormattedCaption(index) {
     const select = document.getElementById('session-select');
     if (!select || select.selectedIndex === 0) return `robopanda_img_${index + 1}`;
     
-    // Ambil teks dari dropdown: "07 Feb : Materi Dasar"
     const sessionText = select.options[select.selectedIndex].text;
     const parts = sessionText.split(' : ');
     
     const rawDate = parts[0] || 'date';
-    // Format tanggal: hilangkan spasi (misal 07 Feb -> 07Feb)
     const cleanDate = rawDate.replace(/\s/g, '');
     
     const rawMateri = parts[1] || 'materi';
-    // Format materi: ambil 1 kata saja atau buang spasi
     const cleanMateri = rawMateri.replace(/\s/g, '');
     
     const noUrut = (index + 1).toString().padStart(2, '0');
@@ -118,7 +115,14 @@ async function loadSessions() {
 }
 
 async function loadGalleryContent() {
-    let query = supabase.from('gallery_contents').select('*').eq('pertemuan_id', activeSessionId).order('created_at', { ascending: true });
+    // FIX: Tentukan kolom pembanding berdasarkan konteks saat ini
+    const targetCol = currentContext === 'school' ? 'pertemuan_id' : 'pertemuan_private_id';
+
+    let query = supabase.from('gallery_contents')
+        .select('*')
+        .eq(targetCol, activeSessionId)
+        .order('created_at', { ascending: true });
+
     if (userProfile.role === 'student' || userProfile.role === 'guest') {
         query = query.eq('is_published', true).eq('is_deleted', false);
     }
@@ -138,7 +142,7 @@ function renderGalleryGrid() {
         let thumb = item.file_url;
         const captionAuto = getFormattedCaption(index);
         
-        if (item.media_type === 'image') thumb = item.file_url.replace('/upload/', '/upload/w_250,q_auto,f_auto/'); // Thumbnail lebih kecil
+        if (item.media_type === 'image') thumb = item.file_url.replace('/upload/', '/upload/w_250,q_auto,f_auto/');
         else if (item.media_type === 'youtube') thumb = `https://img.youtube.com/vi/${urlToId(item.file_url)}/mqdefault.jpg`;
 
         return `
@@ -150,7 +154,7 @@ function renderGalleryGrid() {
     }).join('');
 }
 
-// --- 5. SWIPE GALLERY (WITH CLOSE BUTTON) ---
+// --- 5. SWIPE GALLERY ---
 window.openSwipeGallery = (startIndex) => {
     const lb = document.getElementById('lightbox');
     const content = document.getElementById('lb-content');
@@ -166,7 +170,6 @@ window.openSwipeGallery = (startIndex) => {
         return;
     }
 
-    // Cari index baru di dalam slideData
     const currentItem = rawGalleryData[startIndex];
     const newIdx = slideData.findIndex(d => d.id === currentItem.id);
 
@@ -291,16 +294,11 @@ function injectStyles() {
         .ug-tabs { display: flex; gap: 10px; margin-bottom: 10px; }
         .tab-link { padding: 8px; font-size: 0.8rem; font-weight: bold; color: #94a3b8; border: none; background: none; }
         .tab-link.active { color: #4d97ff; border-bottom: 2px solid #4d97ff; }
-        
-        /* MINI GRID: 3 Kolom Mobile, 6 Kolom Desktop */
         .ug-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
         @media (min-width: 900px) { .ug-grid { grid-template-columns: repeat(6, 1fr); } }
-        
         .ug-card { background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; }
         .ug-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; }
         .ug-caption { padding: 4px; font-size: 0.5rem; color: #64748b; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        
-        /* SLIDER & LIGHTBOX */
         .lightbox-overlay { position: fixed; inset: 0; background: black; display: none; z-index: 9999; }
         .lb-close-btn { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; color: white; background: none; border: none; z-index: 10001; cursor: pointer; }
         .ug-slider-container { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; width: 100%; height: 100vh; }
