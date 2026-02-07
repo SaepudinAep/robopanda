@@ -1,6 +1,7 @@
 /**
- * Project: Unified Gallery Module (Smart Gallery)
- * Features: Context Switcher (School/Private), Session Dropdown, Media Tabs
+ * Project: Robopanda Client (Public/Student)
+ * File: modules/gallery-module.js
+ * Version: 4.4 - Grid Optimization & Professional Captioning
  */
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -10,377 +11,307 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- STATE MANAGEMENT ---
 let userProfile = null;
-let currentContext = 'school'; // 'school' or 'private'
-let activeClassId = null;      // ID Kelas atau ID Private Group
-let activeSessionId = null;    // ID Pertemuan
-let activeTab = 'media';       // 'media' or 'youtube'
+let currentContext = 'school'; 
+let activeClassId = null;      
+let activeSessionId = null;    
+let activeTab = 'media';       
+let rawGalleryData = []; 
 
 // --- 1. INITIALIZATION ---
-export async function init(container) {
+export async function init(container, profileFromIndex) {
+    userProfile = profileFromIndex || { role: 'guest' };
     injectStyles();
-    container.innerHTML = `<div class="loading-state"><i class="fa-solid fa-spinner fa-spin"></i> Memuat Galeri...</div>`;
-
-    await loadUserProfile();
     
-    // Tentukan Default Context berdasarkan Profile
-    if (userProfile.role === 'super_admin' || userProfile.role === 'teacher') {
-        currentContext = 'school'; // Default Admin
+    if (['super_admin', 'teacher', 'pic'].includes(userProfile.role)) {
+        currentContext = 'school';
     } else {
-        // Jika Siswa, cek dia punya kelas sekolah atau private
         if (userProfile.class_id) currentContext = 'school';
         else if (userProfile.class_private_id) currentContext = 'private';
     }
 
     renderLayout(container);
-    await loadClassesOrGroups(); // Load daftar kelas dulu
+    await loadClassesOrGroups(); 
 }
 
-async function loadUserProfile() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase.from('user_profiles').select('*').eq('id', user.id).single();
-    userProfile = data || { role: 'guest' };
+// --- 2. LOGGING & UTILS ---
+async function recordActivity(type, metadata = {}) {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await supabase.from('activity_logs').insert([{
+            user_id: session?.user?.id || null,
+            activity_type: type,
+            metadata: metadata
+        }]);
+    } catch (err) { console.error("Log Error:", err); }
 }
 
-// --- 2. RENDER LAYOUT UTAMA ---
-function renderLayout(container) {
-    // Cek visibilitas tombol Navigasi
-    const showSchoolBtn = userProfile.role === 'super_admin' || userProfile.role === 'teacher' || userProfile.class_id;
-    const showPrivateBtn = userProfile.role === 'super_admin' || userProfile.role === 'teacher' || userProfile.class_private_id;
-
-    container.innerHTML = `
-        <div class="ug-container fade-in">
-            <div class="ug-nav-switcher">
-                ${showSchoolBtn ? `
-                    <button class="nav-btn ${currentContext === 'school' ? 'active' : ''}" onclick="window.switchGalleryContext('school')">
-                        <i class="fa-solid fa-school"></i> Sekolah
-                    </button>` : ''}
-                
-                ${showPrivateBtn ? `
-                    <button class="nav-btn ${currentContext === 'private' ? 'active' : ''}" onclick="window.switchGalleryContext('private')">
-                        <i class="fa-solid fa-user-group"></i> Private
-                    </button>` : ''}
-            </div>
-
-            <div class="ug-filters">
-                <div class="filter-group" id="class-filter-wrapper" style="display:none;">
-                    <label>Pilih Kelas/Group:</label>
-                    <div class="select-box">
-                        <select id="class-select" onchange="window.handleClassChange(this.value)">
-                            <option value="" disabled selected>Memuat...</option>
-                        </select>
-                        <i class="fa-solid fa-chevron-down"></i>
-                    </div>
-                </div>
-
-                <div class="filter-group" style="flex:2;">
-                    <label>Pilih Pertemuan/Topik:</label>
-                    <div class="select-box">
-                        <select id="session-select" onchange="window.handleSessionChange(this.value)">
-                            <option value="" disabled selected>-- Pilih Topik Kegiatan --</option>
-                        </select>
-                        <i class="fa-solid fa-chevron-down"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="ug-tabs" id="content-tabs" style="display:none;">
-                <button class="tab-link active" id="tab-media" onclick="window.switchTab('media')">
-                    <i class="fa-solid fa-images"></i> Foto & Video
-                </button>
-                <button class="tab-link" id="tab-youtube" onclick="window.switchTab('youtube')">
-                    <i class="fa-brands fa-youtube"></i> Video Pembelajaran
-                </button>
-            </div>
-
-            <div id="ug-grid" class="ug-grid">
-                <div class="empty-state">
-                    <i class="fa-solid fa-arrow-up"></i>
-                    <p>Silakan pilih pertemuan di atas untuk melihat galeri.</p>
-                </div>
-            </div>
-        </div>
-
-        <div id="lightbox" class="lightbox-overlay" onclick="window.closeLightbox(event)">
-            <span class="close-lightbox">&times;</span>
-            <div class="lightbox-content">
-                <img id="lb-img" style="display:none;">
-                <div id="lb-vid" style="display:none;"></div>
-            </div>
-        </div>
-    `;
-}
-
-// --- 3. LOGIC HANDLERS ---
-
-// Ganti Konteks (Sekolah <-> Private)
-window.switchGalleryContext = async (ctx) => {
-    currentContext = ctx;
-    activeClassId = null;
-    activeSessionId = null;
+function getFormattedCaption(index) {
+    const select = document.getElementById('session-select');
+    if (!select || select.selectedIndex === 0) return `robopanda_img_${index + 1}`;
     
-    // Update UI Button
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    event.currentTarget.classList.add('active'); // Highlight tombol yang diklik
+    // Ambil teks dari dropdown: "07 Feb : Materi Dasar"
+    const sessionText = select.options[select.selectedIndex].text;
+    const parts = sessionText.split(' : ');
+    
+    const rawDate = parts[0] || 'date';
+    // Format tanggal: hilangkan spasi (misal 07 Feb -> 07Feb)
+    const cleanDate = rawDate.replace(/\s/g, '');
+    
+    const rawMateri = parts[1] || 'materi';
+    // Format materi: ambil 1 kata saja atau buang spasi
+    const cleanMateri = rawMateri.replace(/\s/g, '');
+    
+    const noUrut = (index + 1).toString().padStart(2, '0');
+    
+    return `robopanda_${cleanDate}_${cleanMateri}_${noUrut}`;
+}
 
-    // Reset Grid
-    document.getElementById('ug-grid').innerHTML = '<div class="loading-state">Memuat Data...</div>';
-    document.getElementById('content-tabs').style.display = 'none';
-
-    await loadClassesOrGroups();
-};
-
-// Load Daftar Kelas (Tergantung Role)
+// --- 3. SECURITY & DATA ---
 async function loadClassesOrGroups() {
     const classSelect = document.getElementById('class-select');
     const wrapper = document.getElementById('class-filter-wrapper');
-    const isAdmin = userProfile.role === 'super_admin' || userProfile.role === 'teacher' || userProfile.role === 'pic';
+    if (!classSelect) return;
 
-    // A. LOGIKA SISWA (Otomatis)
-    if (!isAdmin) {
-        wrapper.style.display = 'none'; // Sembunyikan dropdown kelas
-        // Ambil ID langsung dari profil
-        if (currentContext === 'school') activeClassId = userProfile.class_id;
-        else activeClassId = userProfile.class_private_id;
-        
-        if(activeClassId) await loadSessions(); // Langsung load sesi
-        else document.getElementById('ug-grid').innerHTML = '<div class="empty-state">Anda tidak terdaftar di kelas ini.</div>';
+    if (userProfile.role === 'student') {
+        wrapper.style.display = 'none'; 
+        activeClassId = currentContext === 'school' ? userProfile.class_id : userProfile.class_private_id;
+        if (activeClassId) await loadSessions();
+        else document.getElementById('ug-grid').innerHTML = '<div class="empty-state">Akses tidak ditemukan.</div>';
         return;
     }
 
-    // B. LOGIKA ADMIN (Dropdown)
     wrapper.style.display = 'block';
     classSelect.innerHTML = '<option disabled selected>Memuat...</option>';
 
-    let data = [];
-    if (currentContext === 'school') {
-        // Load Kelas Sekolah
-        const res = await supabase.from('classes').select('id, name').order('name');
-        data = res.data;
-    } else {
-        // Load Private Group/Class
-        // Target: class_private
-        const res = await supabase.from('class_private').select('id, name').order('name');
-        data = res.data;
+    let query = currentContext === 'school' 
+        ? supabase.from('classes').select('id, name, school_id') 
+        : supabase.from('class_private').select('id, name, group_id');
+
+    if (userProfile.role === 'pic') {
+        const filterCol = currentContext === 'school' ? 'school_id' : 'group_id';
+        const filterVal = currentContext === 'school' ? userProfile.school_id : userProfile.group_id;
+        query = query.eq(filterCol, filterVal);
     }
 
+    const { data } = await query.order('name');
     if (data && data.length > 0) {
         classSelect.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
             data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-    } else {
-        classSelect.innerHTML = '<option disabled>Data Kosong</option>';
     }
 }
 
-// Handle Perubahan Kelas (Admin)
-window.handleClassChange = async (val) => {
-    activeClassId = val;
-    await loadSessions();
-};
-
-// Load Daftar Pertemuan (Dropdown Utama)
 async function loadSessions() {
     const sessionSelect = document.getElementById('session-select');
-    sessionSelect.innerHTML = '<option disabled selected>Memuat Jadwal...</option>';
+    let query = currentContext === 'school' 
+        ? supabase.from('pertemuan_kelas').select('id, tanggal, materi(title)').eq('class_id', activeClassId)
+        : supabase.from('pertemuan_private').select('id, tanggal, pertemuan_ke, materi_private(judul)').eq('class_id', activeClassId);
 
-    let query;
-    // Logika Percabangan Tabel
-    if (currentContext === 'school') {
-        // Tabel: pertemuan_kelas
-        query = supabase.from('pertemuan_kelas')
-            .select('id, tanggal, materi(title)')
-            .eq('class_id', activeClassId)
-            .order('tanggal', { ascending: false });
-    } else {
-        // Tabel: pertemuan_private
-        query = supabase.from('pertemuan_private')
-            .select('id, tanggal, pertemuan_ke, materi_private(judul)')
-            .eq('class_id', activeClassId)
-            .order('tanggal', { ascending: false });
+    const { data } = await query.order('tanggal', { ascending: false });
+    if (data && data.length > 0) {
+        sessionSelect.innerHTML = '<option value="" disabled selected>-- Pilih Topik --</option>' + 
+            data.map(s => {
+                const dateStr = new Date(s.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                const title = currentContext === 'school' ? (s.materi?.title || 'Kegiatan') : (s.materi_private?.judul || `Sesi ${s.pertemuan_ke}`);
+                return `<option value="${s.id}">${dateStr} : ${title}</option>`;
+            }).join('');
     }
-
-    const { data, error } = await query;
-
-    if (error || !data || data.length === 0) {
-        sessionSelect.innerHTML = '<option disabled>Belum ada pertemuan</option>';
-        return;
-    }
-
-    sessionSelect.innerHTML = '<option value="" disabled selected>-- Pilih Topik Kegiatan --</option>' + 
-        data.map(s => {
-            const dateStr = new Date(s.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-            // Handle beda nama kolom (materi.title vs materi_private.judul)
-            let title = '';
-            if (currentContext === 'school') title = s.materi?.title || 'Kegiatan Rutin';
-            else title = s.materi_private?.judul || `Pertemuan ke-${s.pertemuan_ke}`;
-            
-            return `<option value="${s.id}">${dateStr} : ${title}</option>`;
-        }).join('');
 }
 
-// Handle Perubahan Sesi
-window.handleSessionChange = async (val) => {
-    activeSessionId = val;
-    document.getElementById('content-tabs').style.display = 'flex'; // Munculkan Tab
-    await loadGalleryContent();
-};
-
-// Ganti Tab (Media / Youtube)
-window.switchTab = (tab) => {
-    activeTab = tab;
-    // Update UI Tab
-    document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
-    document.getElementById(`tab-${tab}`).classList.add('active');
-    
-    // Reload Content (Client side filter actually better, but let's re-render)
-    renderGalleryGrid();
-};
-
-// Variabel temp untuk menyimpan data galeri mentah
-let rawGalleryData = [];
-
 async function loadGalleryContent() {
-    const grid = document.getElementById('ug-grid');
-    grid.innerHTML = '<div class="loading-state">Mengambil Dokumentasi...</div>';
-
-    // Query Gallery Contents
-    // Asumsi: Kolom 'pertemuan_id' dipakai bersama untuk link ke sekolah/private
-    // (Pastikan constraint DB mengizinkan ini, atau kolomnya UUID bebas)
-    let query = supabase.from('gallery_contents')
-        .select('*')
-        .eq('pertemuan_id', activeSessionId)
-        .order('created_at', { ascending: false });
-
-    // Filter Role Siswa (Hanya Published)
-    if (userProfile.role !== 'super_admin' && userProfile.role !== 'teacher') {
+    let query = supabase.from('gallery_contents').select('*').eq('pertemuan_id', activeSessionId).order('created_at', { ascending: true });
+    if (userProfile.role === 'student' || userProfile.role === 'guest') {
         query = query.eq('is_published', true).eq('is_deleted', false);
     }
-
-    const { data, error } = await query;
-    if (error) { grid.innerHTML = `<div class="empty-state">Error: ${error.message}</div>`; return; }
-    
+    const { data } = await query;
     rawGalleryData = data || [];
     renderGalleryGrid();
 }
 
+// --- 4. RENDERER (MINI GRID) ---
 function renderGalleryGrid() {
     const grid = document.getElementById('ug-grid');
-    
-    // Filter Data Berdasarkan Tab Aktif
-    const filtered = rawGalleryData.filter(item => {
-        if (activeTab === 'youtube') return item.media_type === 'youtube';
-        else return item.media_type !== 'youtube'; // image or video
-    });
+    const filtered = rawGalleryData.filter(item => (activeTab === 'youtube' ? item.media_type === 'youtube' : item.media_type !== 'youtube'));
 
-    if (filtered.length === 0) {
-        grid.innerHTML = '<div class="empty-state">Belum ada konten di kategori ini.</div>';
-        return;
-    }
+    if (filtered.length === 0) { grid.innerHTML = '<div class="empty-state">Belum ada konten.</div>'; return; }
 
-    grid.innerHTML = filtered.map(item => {
+    grid.innerHTML = filtered.map((item, index) => {
         let thumb = item.file_url;
-        let icon = '';
-        let action = '';
-
-        // Logic Thumbnail
-        if (item.media_type === 'youtube') {
-            const id = getYtId(item.file_url);
-            thumb = `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
-            icon = '<i class="fa-brands fa-youtube" style="color:red; background:white; border-radius:50%; padding:5px;"></i>';
-            action = `window.openLightbox('youtube', '${item.file_url}')`;
-        } else if (item.media_type === 'video') {
-            thumb = item.file_url.replace('.mp4', '.jpg').replace('/upload/', '/upload/w_400,q_auto,f_auto/');
-            icon = '<i class="fa-solid fa-play" style="color:white;"></i>';
-            action = `window.openLightbox('video', '${item.file_url}')`;
-        } else {
-            thumb = item.file_url.replace('/upload/', '/upload/w_400,q_auto,f_auto/');
-            action = `window.openLightbox('image', '${item.file_url}')`;
-        }
+        const captionAuto = getFormattedCaption(index);
+        
+        if (item.media_type === 'image') thumb = item.file_url.replace('/upload/', '/upload/w_250,q_auto,f_auto/'); // Thumbnail lebih kecil
+        else if (item.media_type === 'youtube') thumb = `https://img.youtube.com/vi/${urlToId(item.file_url)}/mqdefault.jpg`;
 
         return `
-            <div class="ug-card fade-in" onclick="${action}">
-                <div class="ug-thumb">
-                    <img src="${thumb}" loading="lazy">
-                    <div class="ug-icon-center">${icon}</div>
-                </div>
-            </div>
-        `;
+            <div class="ug-card" onclick="window.openSwipeGallery(${index})">
+                <img src="${thumb}" loading="lazy">
+                ${item.media_type === 'youtube' ? '<div class="yt-icon"><i class="fa-brands fa-youtube"></i></div>' : ''}
+                <div class="ug-caption">${captionAuto}</div>
+            </div>`;
     }).join('');
 }
 
-// --- UTILS ---
-window.closeLightbox = (e) => {
-    if(e.target.id === 'lightbox' || e.target.classList.contains('close-lightbox')) {
-        document.getElementById('lightbox').style.display = 'none';
-        document.getElementById('lb-vid').innerHTML = '';
-    }
-};
-window.openLightbox = (type, url) => {
+// --- 5. SWIPE GALLERY (WITH CLOSE BUTTON) ---
+window.openSwipeGallery = (startIndex) => {
     const lb = document.getElementById('lightbox');
-    const img = document.getElementById('lb-img');
-    const vid = document.getElementById('lb-vid');
+    const content = document.getElementById('lb-content');
     lb.style.display = 'flex';
+
+    const slideData = rawGalleryData.filter(item => item.media_type !== 'youtube');
     
-    if (type === 'image') {
-        img.src = url; img.style.display = 'block'; vid.style.display = 'none';
+    if (rawGalleryData[startIndex].media_type === 'youtube') {
+        const url = rawGalleryData[startIndex].file_url;
+        content.innerHTML = `
+            <button class="lb-close-btn" onclick="window.closeLightboxManual()">&times;</button>
+            <div class="lb-inner"><iframe src="${url.replace('watch?v=', 'embed/')}" frameborder="0" allowfullscreen></iframe></div>`;
+        return;
+    }
+
+    // Cari index baru di dalam slideData
+    const currentItem = rawGalleryData[startIndex];
+    const newIdx = slideData.findIndex(d => d.id === currentItem.id);
+
+    content.innerHTML = `
+        <button class="lb-close-btn" onclick="window.closeLightboxManual()">&times;</button>
+        <div class="ug-slider-container">
+            ${slideData.map((item, idx) => {
+                const caption = getFormattedCaption(idx);
+                const watermark = currentContext === 'school' 
+                    ? 'l_text:Arial_35_bold:Robopanda,g_south_east,x_20,y_20,co_white,o_50' 
+                    : 'l_Robopanda-Education_zwx0bm,w_130,g_south_east,x_20,y_20,o_70';
+                const finalImg = item.file_url.replace('/upload/', `/upload/w_1000,q_auto,f_auto,${watermark}/`);
+
+                return `
+                    <div class="ug-slide" id="slide-${idx}">
+                        ${item.media_type === 'video' ? `<video src="${item.file_url}" controls></video>` : `<img src="${finalImg}">`}
+                        <div class="lb-controls">
+                            <span class="slide-label">${caption}</span>
+                            <div style="display:flex; gap:10px;">
+                                <button onclick="window.handleShare('${caption}', '${finalImg}')"><i class="fa-solid fa-share-nodes"></i></button>
+                                <button onclick="window.handleDownload('${finalImg}', '${caption}')" class="btn-dl"><i class="fa-solid fa-download"></i></button>
+                            </div>
+                        </div>
+                    </div>`;
+            }).join('')}
+        </div>`;
+
+    setTimeout(() => {
+        const target = document.getElementById(`slide-${newIdx}`);
+        if (target) target.scrollIntoView();
+    }, 100);
+};
+
+// --- 6. ACTIONS ---
+window.handleDownload = async (url, filename) => {
+    try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = window.URL.createObjectURL(blob);
+        a.download = `${filename}.jpg`;
+        a.click();
+        await recordActivity('download', { file: filename, context: currentContext });
+    } catch (e) { alert("Gagal download."); }
+};
+
+window.handleShare = async (title, url) => {
+    if (navigator.share) {
+        try { 
+            await navigator.share({ title: 'Robopanda', text: title, url: url });
+            await recordActivity('share', { title: title, context: currentContext });
+        } catch (e) {}
     } else {
-        img.style.display = 'none'; vid.style.display = 'block';
-        vid.innerHTML = type === 'youtube' 
-            ? `<iframe src="${url}" width="100%" height="100%" frameborder="0"></iframe>` 
-            : `<video src="${url}" controls autoplay width="100%"></video>`;
+        navigator.clipboard.writeText(url);
+        alert("Link disalin!");
     }
 };
 
-function getYtId(url) { const m = url.match(/(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/); return m && m[1].length==11 ? m[1] : null; }
+window.closeLightboxManual = () => {
+    document.getElementById('lightbox').style.display = 'none';
+};
+
+window.switchGalleryContext = (ctx) => {
+    currentContext = ctx;
+    activeClassId = null;
+    activeSessionId = null;
+    loadClassesOrGroups();
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.innerText.toLowerCase().includes(ctx)));
+};
+
+window.handleClassChange = (id) => { activeClassId = id; loadSessions(); };
+window.handleSessionChange = (id) => { 
+    activeSessionId = id; 
+    document.getElementById('content-tabs').style.display = 'flex';
+    loadGalleryContent(); 
+};
+window.switchTab = (tab) => {
+    activeTab = tab;
+    document.querySelectorAll('.tab-link').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
+    renderGalleryGrid();
+};
+
+function urlToId(url) { const m = url.match(/(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/); return m ? m[1] : ''; }
+
+function renderLayout(container) {
+    const role = userProfile.role;
+    const canSeeSchool = ['super_admin', 'teacher', 'pic'].includes(role) || userProfile.class_id;
+    const canSeePrivate = ['super_admin', 'teacher'].includes(role) || userProfile.class_private_id;
+
+    container.innerHTML = `
+        <div class="ug-container">
+            <div class="ug-nav-switcher">
+                ${canSeeSchool ? `<button class="nav-btn ${currentContext === 'school' ? 'active' : ''}" onclick="window.switchGalleryContext('school')">Sekolah</button>` : ''}
+                ${canSeePrivate ? `<button class="nav-btn ${currentContext === 'private' ? 'active' : ''}" onclick="window.switchGalleryContext('private')">Private</button>` : ''}
+            </div>
+            <div class="ug-filters">
+                <div class="filter-group" id="class-filter-wrapper" style="display:none;"><label>Kelas</label><select id="class-select" onchange="window.handleClassChange(this.value)"></select></div>
+                <div class="filter-group"><label>Materi</label><select id="session-select" onchange="window.handleSessionChange(this.value)"></select></div>
+            </div>
+            <div class="ug-tabs" id="content-tabs" style="display:none;">
+                <button class="tab-link active" id="tab-media" onclick="window.switchTab('media')">Gallery</button>
+                <button class="tab-link" id="tab-youtube" onclick="window.switchTab('youtube')">Materi</button>
+            </div>
+            <div id="ug-grid" class="ug-grid"></div>
+        </div>
+        <div id="lightbox" class="lightbox-overlay"><div id="lb-content" style="width:100%; height:100%;"></div></div>`;
+}
 
 function injectStyles() {
     if (document.getElementById('ug-css')) return;
     const s = document.createElement('style');
     s.id = 'ug-css';
     s.textContent = `
-        .ug-container { padding: 20px; font-family: 'Poppins', sans-serif; max-width: 1000px; margin: 0 auto; min-height: 80vh; }
+        .ug-container { padding: 8px; max-width: 1000px; margin: 0 auto; }
+        .ug-nav-switcher { display: flex; gap: 5px; margin-bottom: 10px; }
+        .nav-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.8rem; font-weight: bold; background: white; }
+        .nav-btn.active { background: #4d97ff; color: white; border-color: #4d97ff; }
+        .ug-filters { display: flex; gap: 8px; background: white; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; }
+        .filter-group { flex: 1; }
+        .filter-group label { display: block; font-size: 0.6rem; color: #94a3b8; font-weight: bold; }
+        .filter-group select { width: 100%; padding: 6px; border-radius: 5px; border: 1px solid #cbd5e1; font-size: 0.8rem; }
+        .ug-tabs { display: flex; gap: 10px; margin-bottom: 10px; }
+        .tab-link { padding: 8px; font-size: 0.8rem; font-weight: bold; color: #94a3b8; border: none; background: none; }
+        .tab-link.active { color: #4d97ff; border-bottom: 2px solid #4d97ff; }
         
-        /* NAV SWITCHER */
-        .ug-nav-switcher { display: flex; justify-content: center; gap: 15px; margin-bottom: 25px; }
-        .nav-btn { background: white; border: 1px solid #cbd5e1; padding: 12px 30px; border-radius: 50px; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 8px; }
-        .nav-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; box-shadow: 0 4px 10px rgba(59,130,246,0.3); }
-        .nav-btn:hover:not(.active) { background: #f1f5f9; }
-
-        /* FILTERS */
-        .ug-filters { display: flex; gap: 20px; background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 20px; flex-wrap: wrap; }
-        .filter-group { flex: 1; min-width: 200px; }
-        .filter-group label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 8px; font-weight: 600; }
-        .select-box { position: relative; }
-        .select-box select { width: 100%; padding: 12px 40px 12px 15px; border-radius: 10px; border: 1px solid #cbd5e1; appearance: none; font-size: 0.95rem; background: white; color: #334155; }
-        .select-box i { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
-
-        /* TABS */
-        .ug-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 2px; }
-        .tab-link { background: none; border: none; padding: 10px 20px; font-weight: 600; color: #94a3b8; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 8px; border-bottom: 3px solid transparent; margin-bottom: -4px; transition: 0.2s; }
-        .tab-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
-        .tab-link:hover { color: #1e293b; }
-
-        /* GRID */
-        .ug-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
-        .ug-card { background: black; border-radius: 12px; overflow: hidden; aspect-ratio: 1/1; cursor: pointer; position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .ug-thumb { width: 100%; height: 100%; position: relative; }
-        .ug-thumb img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; opacity: 0.9; }
-        .ug-card:hover img { transform: scale(1.05); opacity: 1; }
-        .ug-icon-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem; z-index: 2; }
-
-        /* UTILS */
-        .loading-state, .empty-state { grid-column: 1/-1; text-align: center; padding: 50px; color: #94a3b8; font-weight: 500; }
-        .lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; display: none; justify-content: center; align-items: center; }
-        .lightbox-content { width: 90%; max-width: 1000px; max-height: 90vh; display: flex; justify-content: center; align-items: center; }
-        .lightbox-content img, .lightbox-content video, .lightbox-content iframe { max-width: 100%; max-height: 80vh; border-radius: 8px; width: 100%; }
-        .close-lightbox { position: absolute; top: 20px; right: 30px; color: white; font-size: 3rem; cursor: pointer; }
-        .fade-in { animation: fadeIn 0.4s ease forwards; } @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+        /* MINI GRID: 3 Kolom Mobile, 6 Kolom Desktop */
+        .ug-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+        @media (min-width: 900px) { .ug-grid { grid-template-columns: repeat(6, 1fr); } }
         
-        @media (max-width: 600px) {
-            .ug-nav-switcher { flex-direction: row; }
-            .ug-filters { flex-direction: column; gap: 10px; }
-            .ug-grid { grid-template-columns: repeat(2, 1fr); }
-        }
+        .ug-card { background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .ug-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; }
+        .ug-caption { padding: 4px; font-size: 0.5rem; color: #64748b; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* SLIDER & LIGHTBOX */
+        .lightbox-overlay { position: fixed; inset: 0; background: black; display: none; z-index: 9999; }
+        .lb-close-btn { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; color: white; background: none; border: none; z-index: 10001; cursor: pointer; }
+        .ug-slider-container { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; width: 100%; height: 100vh; }
+        .ug-slider-container::-webkit-scrollbar { display: none; }
+        .ug-slide { min-width: 100%; height: 100%; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; }
+        .ug-slide img, .ug-slide video { max-width: 100%; max-height: 75vh; border-radius: 10px; }
+        .lb-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 15px; width: 100%; }
+        .slide-label { color: #cbd5e1; font-size: 0.75rem; font-family: monospace; }
+        .lb-controls button { padding: 12px 25px; border-radius: 30px; border: none; background: #3b82f6; color: white; font-weight: bold; }
+        .lb-controls .btn-dl { background: #10b981; }
+        .loading-state { text-align: center; padding: 20px; color: #94a3b8; grid-column: 1/-1; }
     `;
     document.head.appendChild(s);
 }
