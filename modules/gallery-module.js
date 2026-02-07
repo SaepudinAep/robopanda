@@ -1,7 +1,6 @@
 /**
- * Project: Timeline Kegiatan Siswa (Public View)
- * Layout: Masonry Grid (Pinterest Style) - Optimized for Vertical Photos
- * Access: Read Only. Student (Auto Class), Admin (Select Class).
+ * Project: Unified Gallery Module (Smart Gallery)
+ * Features: Context Switcher (School/Private), Session Dropdown, Media Tabs
  */
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -9,371 +8,378 @@ import { supabaseUrl, supabaseKey } from '../assets/js/config.js';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// State
-let targetClassId = null;
-let userRole = null;
-let currentMonth = new Date().getMonth() + 1; // 1-12
-let currentYear = new Date().getFullYear();
+// --- STATE MANAGEMENT ---
+let userProfile = null;
+let currentContext = 'school'; // 'school' or 'private'
+let activeClassId = null;      // ID Kelas atau ID Private Group
+let activeSessionId = null;    // ID Pertemuan
+let activeTab = 'media';       // 'media' or 'youtube'
 
-// ==========================================
-// 1. INITIALIZATION & ROLE CHECK
-// ==========================================
-export async function init(canvas) {
+// --- 1. INITIALIZATION ---
+export async function init(container) {
     injectStyles();
-    canvas.innerHTML = `
-        <div class="tl-container fade-in">
-            <div class="tl-header">
-                <div class="header-titles">
-                    <h2 id="page-title">Galeri Kegiatan</h2>
-                    <span id="page-subtitle">Memuat data...</span>
-                </div>
-                
-                <div class="header-controls">
-                    <div id="admin-class-wrapper" style="display:none;">
-                        <select id="admin-class-select" class="control-select">
-                            <option value="" disabled selected>Pilih Kelas</option>
-                        </select>
-                    </div>
+    container.innerHTML = `<div class="loading-state"><i class="fa-solid fa-spinner fa-spin"></i> Memuat Galeri...</div>`;
 
-                    <select id="filter-month" class="control-select">
-                        <option value="all">Semua Bulan</option>
-                        <option value="1">Januari</option>
-                        <option value="2">Februari</option>
-                        <option value="3">Maret</option>
-                        <option value="4">April</option>
-                        <option value="5">Mei</option>
-                        <option value="6">Juni</option>
-                        <option value="7">Juli</option>
-                        <option value="8">Agustus</option>
-                        <option value="9">September</option>
-                        <option value="10">Oktober</option>
-                        <option value="11">November</option>
-                        <option value="12">Desember</option>
-                    </select>
+    await loadUserProfile();
+    
+    // Tentukan Default Context berdasarkan Profile
+    if (userProfile.role === 'super_admin' || userProfile.role === 'teacher') {
+        currentContext = 'school'; // Default Admin
+    } else {
+        // Jika Siswa, cek dia punya kelas sekolah atau private
+        if (userProfile.class_id) currentContext = 'school';
+        else if (userProfile.class_private_id) currentContext = 'private';
+    }
+
+    renderLayout(container);
+    await loadClassesOrGroups(); // Load daftar kelas dulu
+}
+
+async function loadUserProfile() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.from('user_profiles').select('*').eq('id', user.id).single();
+    userProfile = data || { role: 'guest' };
+}
+
+// --- 2. RENDER LAYOUT UTAMA ---
+function renderLayout(container) {
+    // Cek visibilitas tombol Navigasi
+    const showSchoolBtn = userProfile.role === 'super_admin' || userProfile.role === 'teacher' || userProfile.class_id;
+    const showPrivateBtn = userProfile.role === 'super_admin' || userProfile.role === 'teacher' || userProfile.class_private_id;
+
+    container.innerHTML = `
+        <div class="ug-container fade-in">
+            <div class="ug-nav-switcher">
+                ${showSchoolBtn ? `
+                    <button class="nav-btn ${currentContext === 'school' ? 'active' : ''}" onclick="window.switchGalleryContext('school')">
+                        <i class="fa-solid fa-school"></i> Sekolah
+                    </button>` : ''}
+                
+                ${showPrivateBtn ? `
+                    <button class="nav-btn ${currentContext === 'private' ? 'active' : ''}" onclick="window.switchGalleryContext('private')">
+                        <i class="fa-solid fa-user-group"></i> Private
+                    </button>` : ''}
+            </div>
+
+            <div class="ug-filters">
+                <div class="filter-group" id="class-filter-wrapper" style="display:none;">
+                    <label>Pilih Kelas/Group:</label>
+                    <div class="select-box">
+                        <select id="class-select" onchange="window.handleClassChange(this.value)">
+                            <option value="" disabled selected>Memuat...</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+
+                <div class="filter-group" style="flex:2;">
+                    <label>Pilih Pertemuan/Topik:</label>
+                    <div class="select-box">
+                        <select id="session-select" onchange="window.handleSessionChange(this.value)">
+                            <option value="" disabled selected>-- Pilih Topik Kegiatan --</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
                 </div>
             </div>
 
-            <div id="masonry-grid" class="masonry-grid">
-                <div class="loading-state">
-                    <i class="fa-solid fa-circle-notch fa-spin"></i>
-                    <p>Sedang menyusun kenangan...</p>
+            <div class="ug-tabs" id="content-tabs" style="display:none;">
+                <button class="tab-link active" id="tab-media" onclick="window.switchTab('media')">
+                    <i class="fa-solid fa-images"></i> Foto & Video
+                </button>
+                <button class="tab-link" id="tab-youtube" onclick="window.switchTab('youtube')">
+                    <i class="fa-brands fa-youtube"></i> Video Pembelajaran
+                </button>
+            </div>
+
+            <div id="ug-grid" class="ug-grid">
+                <div class="empty-state">
+                    <i class="fa-solid fa-arrow-up"></i>
+                    <p>Silakan pilih pertemuan di atas untuk melihat galeri.</p>
                 </div>
             </div>
         </div>
 
-        <div id="lightbox" class="lightbox-overlay" onclick="closeLightbox(event)">
+        <div id="lightbox" class="lightbox-overlay" onclick="window.closeLightbox(event)">
             <span class="close-lightbox">&times;</span>
-            
-            <div class="lb-content">
-                <img id="lb-img" src="" style="display:none;">
-                <div id="lb-video" style="display:none;"></div>
-                
-                <div class="lb-info-bar">
-                    <div class="lb-text">
-                        <h4 id="lb-topic">Topik Kegiatan</h4>
-                        <span id="lb-date">Tanggal</span>
-                    </div>
-                    <div class="lb-actions">
-                        <a id="lb-download" href="#" target="_blank" class="btn-download" download>
-                            <i class="fa-solid fa-download"></i> Simpan
-                        </a>
-                    </div>
-                </div>
+            <div class="lightbox-content">
+                <img id="lb-img" style="display:none;">
+                <div id="lb-vid" style="display:none;"></div>
             </div>
         </div>
     `;
-
-    bindEvents();
-    await determineContext();
 }
 
-// ==========================================
-// 2. CONTEXT LOGIC (SIAPA YANG LOGIN?)
-// ==========================================
-async function determineContext() {
-    const { data: { user } } = await supabase.auth.getUser();
+// --- 3. LOGIC HANDLERS ---
+
+// Ganti Konteks (Sekolah <-> Private)
+window.switchGalleryContext = async (ctx) => {
+    currentContext = ctx;
+    activeClassId = null;
+    activeSessionId = null;
     
-    if (!user) {
-        showError("Anda harus login.");
+    // Update UI Button
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    event.currentTarget.classList.add('active'); // Highlight tombol yang diklik
+
+    // Reset Grid
+    document.getElementById('ug-grid').innerHTML = '<div class="loading-state">Memuat Data...</div>';
+    document.getElementById('content-tabs').style.display = 'none';
+
+    await loadClassesOrGroups();
+};
+
+// Load Daftar Kelas (Tergantung Role)
+async function loadClassesOrGroups() {
+    const classSelect = document.getElementById('class-select');
+    const wrapper = document.getElementById('class-filter-wrapper');
+    const isAdmin = userProfile.role === 'super_admin' || userProfile.role === 'teacher' || userProfile.role === 'pic';
+
+    // A. LOGIKA SISWA (Otomatis)
+    if (!isAdmin) {
+        wrapper.style.display = 'none'; // Sembunyikan dropdown kelas
+        // Ambil ID langsung dari profil
+        if (currentContext === 'school') activeClassId = userProfile.class_id;
+        else activeClassId = userProfile.class_private_id;
+        
+        if(activeClassId) await loadSessions(); // Langsung load sesi
+        else document.getElementById('ug-grid').innerHTML = '<div class="empty-state">Anda tidak terdaftar di kelas ini.</div>';
         return;
     }
 
-    // Cek Profile
-    const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role, class_id, classes(name)')
-        .eq('id', user.id)
-        .single();
+    // B. LOGIKA ADMIN (Dropdown)
+    wrapper.style.display = 'block';
+    classSelect.innerHTML = '<option disabled selected>Memuat...</option>';
 
-    userRole = profile?.role || 'student';
-
-    if (userRole === 'student' || userRole === 'parent') {
-        // --- SKENARIO SISWA/ORTU ---
-        if (!profile.class_id) {
-            showError("Akun Anda belum terhubung dengan kelas manapun. Hubungi Admin.");
-            return;
-        }
-        targetClassId = profile.class_id;
-        document.getElementById('page-subtitle').innerText = `Kelas ${profile.classes?.name || ''}`;
-        
-        // Auto set filter bulan ke bulan sekarang
-        document.getElementById('filter-month').value = currentMonth;
-        loadGallery();
-
+    let data = [];
+    if (currentContext === 'school') {
+        // Load Kelas Sekolah
+        const res = await supabase.from('classes').select('id, name').order('name');
+        data = res.data;
     } else {
-        // --- SKENARIO ADMIN/GURU ---
-        document.getElementById('admin-class-wrapper').style.display = 'block';
-        document.getElementById('page-subtitle').innerText = "Mode Preview Admin";
-        await loadClassesForAdmin();
+        // Load Private Group/Class
+        // Target: class_private
+        const res = await supabase.from('class_private').select('id, name').order('name');
+        data = res.data;
+    }
+
+    if (data && data.length > 0) {
+        classSelect.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
+            data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    } else {
+        classSelect.innerHTML = '<option disabled>Data Kosong</option>';
     }
 }
 
-async function loadClassesForAdmin() {
-    const select = document.getElementById('admin-class-select');
-    const { data: classes } = await supabase
-        .from('classes')
-        .select('id, name')
-        .order('name');
+// Handle Perubahan Kelas (Admin)
+window.handleClassChange = async (val) => {
+    activeClassId = val;
+    await loadSessions();
+};
 
-    if (classes) {
-        select.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
-            classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-        
-        // Kalau admin sebelumnya sudah pilih kelas di galeri-sekolah, auto select
-        const lastClass = localStorage.getItem('activeClassId');
-        if (lastClass) {
-            select.value = lastClass;
-            targetClassId = lastClass;
-            loadGallery();
-        }
+// Load Daftar Pertemuan (Dropdown Utama)
+async function loadSessions() {
+    const sessionSelect = document.getElementById('session-select');
+    sessionSelect.innerHTML = '<option disabled selected>Memuat Jadwal...</option>';
+
+    let query;
+    // Logika Percabangan Tabel
+    if (currentContext === 'school') {
+        // Tabel: pertemuan_kelas
+        query = supabase.from('pertemuan_kelas')
+            .select('id, tanggal, materi(title)')
+            .eq('class_id', activeClassId)
+            .order('tanggal', { ascending: false });
+    } else {
+        // Tabel: pertemuan_private
+        query = supabase.from('pertemuan_private')
+            .select('id, tanggal, pertemuan_ke, materi_private(judul)')
+            .eq('class_id', activeClassId)
+            .order('tanggal', { ascending: false });
     }
 
-    select.onchange = (e) => {
-        targetClassId = e.target.value;
-        loadGallery();
-    };
+    const { data, error } = await query;
+
+    if (error || !data || data.length === 0) {
+        sessionSelect.innerHTML = '<option disabled>Belum ada pertemuan</option>';
+        return;
+    }
+
+    sessionSelect.innerHTML = '<option value="" disabled selected>-- Pilih Topik Kegiatan --</option>' + 
+        data.map(s => {
+            const dateStr = new Date(s.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+            // Handle beda nama kolom (materi.title vs materi_private.judul)
+            let title = '';
+            if (currentContext === 'school') title = s.materi?.title || 'Kegiatan Rutin';
+            else title = s.materi_private?.judul || `Pertemuan ke-${s.pertemuan_ke}`;
+            
+            return `<option value="${s.id}">${dateStr} : ${title}</option>`;
+        }).join('');
 }
 
-// ==========================================
-// 3. LOAD DATA & RENDER MASONRY
-// ==========================================
-async function loadGallery() {
-    if (!targetClassId) return;
+// Handle Perubahan Sesi
+window.handleSessionChange = async (val) => {
+    activeSessionId = val;
+    document.getElementById('content-tabs').style.display = 'flex'; // Munculkan Tab
+    await loadGalleryContent();
+};
 
-    const grid = document.getElementById('masonry-grid');
-    grid.innerHTML = `<div class="loading-state"><i class="fa-solid fa-spinner fa-spin"></i> Memuat...</div>`;
+// Ganti Tab (Media / Youtube)
+window.switchTab = (tab) => {
+    activeTab = tab;
+    // Update UI Tab
+    document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    
+    // Reload Content (Client side filter actually better, but let's re-render)
+    renderGalleryGrid();
+};
 
-    const selectedMonth = document.getElementById('filter-month').value;
+// Variabel temp untuk menyimpan data galeri mentah
+let rawGalleryData = [];
 
-    // QUERY: Join gallery -> pertemuan -> materi
-    // Filter Wajib: is_published = true
-    let query = supabase
-        .from('gallery_contents')
-        .select(`
-            *,
-            pertemuan:pertemuan_kelas (
-                tanggal,
-                materi (title)
-            )
-        `)
-        .eq('class_id', targetClassId)
-        .eq('is_published', true) // HARGA MATI
-        .eq('is_deleted', false)
+async function loadGalleryContent() {
+    const grid = document.getElementById('ug-grid');
+    grid.innerHTML = '<div class="loading-state">Mengambil Dokumentasi...</div>';
+
+    // Query Gallery Contents
+    // Asumsi: Kolom 'pertemuan_id' dipakai bersama untuk link ke sekolah/private
+    // (Pastikan constraint DB mengizinkan ini, atau kolomnya UUID bebas)
+    let query = supabase.from('gallery_contents')
+        .select('*')
+        .eq('pertemuan_id', activeSessionId)
         .order('created_at', { ascending: false });
 
-    const { data: photos, error } = await query;
-
-    if (error) {
-        showError(error.message);
-        return;
+    // Filter Role Siswa (Hanya Published)
+    if (userProfile.role !== 'super_admin' && userProfile.role !== 'teacher') {
+        query = query.eq('is_published', true).eq('is_deleted', false);
     }
 
-    // Filter Bulan di Client Side (Supabase filter date agak tricky, lebih cepat di JS untuk data < 1000)
-    let filteredPhotos = photos;
-    if (selectedMonth !== 'all') {
-        filteredPhotos = photos.filter(p => {
-            const d = new Date(p.pertemuan?.tanggal);
-            return (d.getMonth() + 1) == selectedMonth;
-        });
-    }
-
-    if (filteredPhotos.length === 0) {
-        grid.innerHTML = `
-            <div class="empty-state">
-                <img src="https://img.icons8.com/clouds/100/null/photos.png"/>
-                <h3>Belum ada dokumentasi</h3>
-                <p>Guru belum mempublish foto untuk periode ini.</p>
-            </div>`;
-        return;
-    }
-
-    renderMasonry(filteredPhotos, grid);
+    const { data, error } = await query;
+    if (error) { grid.innerHTML = `<div class="empty-state">Error: ${error.message}</div>`; return; }
+    
+    rawGalleryData = data || [];
+    renderGalleryGrid();
 }
 
-function renderMasonry(photos, container) {
-    container.innerHTML = photos.map(p => {
-        const dateObj = new Date(p.pertemuan?.tanggal);
-        const dateStr = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-        const topic = p.pertemuan?.materi?.title || 'Kegiatan Rutin';
-        
-        let mediaHtml = '';
-        let clickAction = '';
-        let badgeType = '';
+function renderGalleryGrid() {
+    const grid = document.getElementById('ug-grid');
+    
+    // Filter Data Berdasarkan Tab Aktif
+    const filtered = rawGalleryData.filter(item => {
+        if (activeTab === 'youtube') return item.media_type === 'youtube';
+        else return item.media_type !== 'youtube'; // image or video
+    });
 
-        if (p.media_type === 'youtube') {
-            const vidId = getYoutubeId(p.file_url);
-            const thumb = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
-            mediaHtml = `<img src="${thumb}" loading="lazy" alt="${topic}">`;
-            badgeType = `<div class="type-badge"><i class="fa-brands fa-youtube"></i></div>`;
-            clickAction = `openLightbox('youtube', '${p.file_url}', '${topic}', '${dateStr}')`;
-        } else if (p.media_type === 'video') {
-            const thumb = p.file_url.replace('.mp4', '.jpg').replace('/upload/', '/upload/w_400,q_auto,f_auto/');
-            mediaHtml = `<img src="${thumb}" loading="lazy" alt="${topic}">`;
-            badgeType = `<div class="type-badge"><i class="fa-solid fa-play"></i></div>`;
-            clickAction = `openLightbox('video', '${p.file_url}', '${topic}', '${dateStr}')`;
+    if (filtered.length === 0) {
+        grid.innerHTML = '<div class="empty-state">Belum ada konten di kategori ini.</div>';
+        return;
+    }
+
+    grid.innerHTML = filtered.map(item => {
+        let thumb = item.file_url;
+        let icon = '';
+        let action = '';
+
+        // Logic Thumbnail
+        if (item.media_type === 'youtube') {
+            const id = getYtId(item.file_url);
+            thumb = `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
+            icon = '<i class="fa-brands fa-youtube" style="color:red; background:white; border-radius:50%; padding:5px;"></i>';
+            action = `window.openLightbox('youtube', '${item.file_url}')`;
+        } else if (item.media_type === 'video') {
+            thumb = item.file_url.replace('.mp4', '.jpg').replace('/upload/', '/upload/w_400,q_auto,f_auto/');
+            icon = '<i class="fa-solid fa-play" style="color:white;"></i>';
+            action = `window.openLightbox('video', '${item.file_url}')`;
         } else {
-            // Optimasi gambar vertikal
-            const thumb = p.file_url.replace('/upload/', '/upload/w_500,q_auto,f_auto/');
-            mediaHtml = `<img src="${thumb}" loading="lazy" alt="${topic}">`;
-            clickAction = `openLightbox('image', '${p.file_url}', '${topic}', '${dateStr}')`;
+            thumb = item.file_url.replace('/upload/', '/upload/w_400,q_auto,f_auto/');
+            action = `window.openLightbox('image', '${item.file_url}')`;
         }
 
         return `
-            <div class="masonry-item fade-in" onclick="${clickAction}">
-                <div class="m-content">
-                    ${mediaHtml}
-                    ${badgeType}
-                    <div class="m-overlay">
-                        <span class="m-date">${dateStr}</span>
-                        <span class="m-topic">${topic}</span>
-                    </div>
+            <div class="ug-card fade-in" onclick="${action}">
+                <div class="ug-thumb">
+                    <img src="${thumb}" loading="lazy">
+                    <div class="ug-icon-center">${icon}</div>
                 </div>
             </div>
         `;
     }).join('');
 }
 
-// ==========================================
-// 4. LIGHTBOX & DOWNLOAD
-// ==========================================
-window.openLightbox = (type, url, topic, date) => {
+// --- UTILS ---
+window.closeLightbox = (e) => {
+    if(e.target.id === 'lightbox' || e.target.classList.contains('close-lightbox')) {
+        document.getElementById('lightbox').style.display = 'none';
+        document.getElementById('lb-vid').innerHTML = '';
+    }
+};
+window.openLightbox = (type, url) => {
     const lb = document.getElementById('lightbox');
     const img = document.getElementById('lb-img');
-    const vid = document.getElementById('lb-video');
-    const dlBtn = document.getElementById('lb-download');
-
-    document.getElementById('lb-topic').innerText = topic;
-    document.getElementById('lb-date').innerText = date;
-    
+    const vid = document.getElementById('lb-vid');
     lb.style.display = 'flex';
-    img.style.display = 'none';
-    vid.style.display = 'none';
-    vid.innerHTML = '';
-
+    
     if (type === 'image') {
-        img.src = url;
-        img.style.display = 'block';
-        dlBtn.href = url.replace('/upload/', '/upload/fl_attachment/'); // Force Download Cloudinary
-        dlBtn.style.display = 'flex';
-    } else if (type === 'video') {
-        vid.style.display = 'block';
-        vid.innerHTML = `<video controls autoplay style="max-width:100%; max-height:100%"><source src="${url}"></video>`;
-        dlBtn.href = url.replace('/upload/', '/upload/fl_attachment/');
-        dlBtn.style.display = 'flex';
-    } else if (type === 'youtube') {
-        vid.style.display = 'block';
-        vid.innerHTML = `<iframe width="100%" height="100%" src="${url}?autoplay=1" frameborder="0" allowfullscreen></iframe>`;
-        dlBtn.style.display = 'none'; // YouTube gabisa didownload direct
+        img.src = url; img.style.display = 'block'; vid.style.display = 'none';
+    } else {
+        img.style.display = 'none'; vid.style.display = 'block';
+        vid.innerHTML = type === 'youtube' 
+            ? `<iframe src="${url}" width="100%" height="100%" frameborder="0"></iframe>` 
+            : `<video src="${url}" controls autoplay width="100%"></video>`;
     }
 };
 
-window.closeLightbox = (e) => {
-    if (e.target.id === 'lightbox' || e.target.classList.contains('close-lightbox')) {
-        document.getElementById('lightbox').style.display = 'none';
-        document.getElementById('lb-video').innerHTML = '';
-    }
-};
-
-// ==========================================
-// 5. UTILS & STYLES (MASONRY CSS)
-// ==========================================
-function bindEvents() {
-    document.getElementById('filter-month').onchange = () => loadGallery();
-}
-
-function getYoutubeId(url) {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-}
-
-function showError(msg) {
-    document.getElementById('masonry-grid').innerHTML = `<div class="error-msg">${msg}</div>`;
-}
+function getYtId(url) { const m = url.match(/(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/); return m && m[1].length==11 ? m[1] : null; }
 
 function injectStyles() {
-    if (document.getElementById('tl-css')) return;
+    if (document.getElementById('ug-css')) return;
     const s = document.createElement('style');
-    s.id = 'tl-css';
+    s.id = 'ug-css';
     s.textContent = `
-        .tl-container { padding: 20px; max-width: 1200px; margin: 0 auto; font-family: 'Poppins', sans-serif; }
+        .ug-container { padding: 20px; font-family: 'Poppins', sans-serif; max-width: 1000px; margin: 0 auto; min-height: 80vh; }
         
-        /* HEADER */
-        .tl-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; flex-wrap: wrap; gap: 15px; }
-        #page-title { margin: 0; font-size: 1.8rem; color: #1e293b; font-weight: 800; }
-        #page-subtitle { color: #64748b; font-size: 1rem; }
-        
-        .header-controls { display: flex; gap: 10px; }
-        .control-select { padding: 10px 15px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-weight: 600; color: #334155; cursor: pointer; }
+        /* NAV SWITCHER */
+        .ug-nav-switcher { display: flex; justify-content: center; gap: 15px; margin-bottom: 25px; }
+        .nav-btn { background: white; border: 1px solid #cbd5e1; padding: 12px 30px; border-radius: 50px; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 8px; }
+        .nav-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; box-shadow: 0 4px 10px rgba(59,130,246,0.3); }
+        .nav-btn:hover:not(.active) { background: #f1f5f9; }
 
-        /* MASONRY GRID (PURE CSS MAGIC) */
-        .masonry-grid { column-count: 4; column-gap: 15px; }
-        
-        .masonry-item { break-inside: avoid; margin-bottom: 15px; position: relative; cursor: pointer; border-radius: 16px; overflow: hidden; transition: transform 0.3s; background: #000; }
-        .masonry-item:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
-        
-        .m-content { position: relative; width: 100%; }
-        .m-content img { width: 100%; height: auto; display: block; }
-        
-        /* HOVER OVERLAY INFO */
-        .m-overlay { position: absolute; bottom: 0; left: 0; width: 100%; padding: 20px 15px 15px; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); color: white; display: flex; flex-direction: column; opacity: 1; transition: 0.3s; }
-        .m-date { font-size: 0.75rem; font-weight: 400; opacity: 0.9; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px; }
-        .m-topic { font-size: 0.95rem; font-weight: 700; line-height: 1.2; }
-        
-        .type-badge { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); border: 1px solid rgba(255,255,255,0.3); }
+        /* FILTERS */
+        .ug-filters { display: flex; gap: 20px; background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 20px; flex-wrap: wrap; }
+        .filter-group { flex: 1; min-width: 200px; }
+        .filter-group label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 8px; font-weight: 600; }
+        .select-box { position: relative; }
+        .select-box select { width: 100%; padding: 12px 40px 12px 15px; border-radius: 10px; border: 1px solid #cbd5e1; appearance: none; font-size: 0.95rem; background: white; color: #334155; }
+        .select-box i { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
 
-        /* STATES */
-        .loading-state, .empty-state { text-align: center; padding: 50px; color: #94a3b8; width: 100%; grid-column: 1 / -1; }
-        .empty-state img { width: 80px; opacity: 0.5; margin-bottom: 15px; }
-        .error-msg { background: #fee2e2; color: #dc2626; padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; }
+        /* TABS */
+        .ug-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 2px; }
+        .tab-link { background: none; border: none; padding: 10px 20px; font-weight: 600; color: #94a3b8; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 8px; border-bottom: 3px solid transparent; margin-bottom: -4px; transition: 0.2s; }
+        .tab-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+        .tab-link:hover { color: #1e293b; }
 
-        /* LIGHTBOX */
-        .lightbox-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); display: none; justify-content: center; align-items: center; z-index: 10000; }
-        .lb-content { position: relative; max-width: 90%; max-height: 90vh; display: flex; flex-direction: column; align-items: center; }
-        .lb-content img { max-height: 80vh; max-width: 100%; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .lb-content video, .lb-content iframe { width: 80vw; height: 45vw; max-width: 1000px; max-height: 560px; border-radius: 8px; }
+        /* GRID */
+        .ug-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+        .ug-card { background: black; border-radius: 12px; overflow: hidden; aspect-ratio: 1/1; cursor: pointer; position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .ug-thumb { width: 100%; height: 100%; position: relative; }
+        .ug-thumb img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; opacity: 0.9; }
+        .ug-card:hover img { transform: scale(1.05); opacity: 1; }
+        .ug-icon-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem; z-index: 2; }
 
-        .lb-info-bar { width: 100%; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; color: white; }
-        .lb-text h4 { margin: 0; font-size: 1.1rem; }
-        .lb-text span { font-size: 0.85rem; opacity: 0.7; }
+        /* UTILS */
+        .loading-state, .empty-state { grid-column: 1/-1; text-align: center; padding: 50px; color: #94a3b8; font-weight: 500; }
+        .lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; display: none; justify-content: center; align-items: center; }
+        .lightbox-content { width: 90%; max-width: 1000px; max-height: 90vh; display: flex; justify-content: center; align-items: center; }
+        .lightbox-content img, .lightbox-content video, .lightbox-content iframe { max-width: 100%; max-height: 80vh; border-radius: 8px; width: 100%; }
+        .close-lightbox { position: absolute; top: 20px; right: 30px; color: white; font-size: 3rem; cursor: pointer; }
+        .fade-in { animation: fadeIn 0.4s ease forwards; } @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
         
-        .btn-download { background: white; color: #0f172a; padding: 10px 20px; border-radius: 30px; text-decoration: none; font-weight: 700; display: flex; gap: 8px; align-items: center; transition: 0.2s; }
-        .btn-download:hover { background: #e2e8f0; transform: scale(1.05); }
-        
-        .close-lightbox { position: absolute; top: 20px; right: 30px; color: white; font-size: 3rem; cursor: pointer; opacity: 0.6; transition: 0.2s; }
-        .close-lightbox:hover { opacity: 1; transform: rotate(90deg); }
-
-        .fade-in { animation: fadeIn 0.6s ease forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* RESPONSIVE */
-        @media (max-width: 1024px) { .masonry-grid { column-count: 3; } }
-        @media (max-width: 768px) { 
-            .masonry-grid { column-count: 2; column-gap: 10px; } 
-            .tl-header { flex-direction: column; align-items: flex-start; }
-            .header-controls { width: 100%; }
-            .control-select { flex: 1; }
-            .btn-download span { display: none; } /* Icon only di HP */
+        @media (max-width: 600px) {
+            .ug-nav-switcher { flex-direction: row; }
+            .ug-filters { flex-direction: column; gap: 10px; }
+            .ug-grid { grid-template-columns: repeat(2, 1fr); }
         }
     `;
     document.head.appendChild(s);
