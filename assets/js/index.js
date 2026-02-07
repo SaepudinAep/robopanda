@@ -1,7 +1,8 @@
 /**
  * Project: Robopanda Client (Public/Student)
  * File: assets/js/index.js
- * Version: 4.3 - Manual Stable with Activity Logging
+ * Version: 4.4 - Universal Guest Bypass Logic
+ * Format: Plain Text (Anti-Crash Optimization for Huawei T10s)
  */
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -11,14 +12,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- 1. STATE MANAGEMENT ---
 let currentUser = null;
-let userProfile = { role: 'guest' }; // Standar main.js
+let userProfile = { role: 'guest' }; // Default role jika belum login
 let currentActiveModule = 'explorer-module';
 
 // --- 2. INISIALISASI ---
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("  Robopanda Foundation: Active.");
 
-    // Ambil sesi login saat start
     const { data: { session } } = await supabase.auth.getSession();
     currentUser = session?.user || null;
     
@@ -31,12 +31,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await fetchPublicMenus();
     updateAuthUI();
     
-    // Load modul default (Explorer)
+    // Load modul default
     loadModule('explorer-module'); 
     
     setupAuthListeners();
 
-    // Listener Pasif: Hanya menangani logout
     supabase.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_OUT') {
             window.location.reload(); 
@@ -50,7 +49,6 @@ async function recordActivity(type, metadata = {}) {
         const { data: { session } } = await supabase.auth.getSession();
         const userId = session?.user?.id || null;
 
-        // Kirim data ke tabel activity_logs
         await supabase.from('activity_logs').insert([{
             user_id: userId,
             activity_type: type,
@@ -73,13 +71,18 @@ async function fetchPublicMenus() {
             const filtered = allMenus.filter(menu => {
                 let allowed = [];
                 try {
+                    // Pastikan format allowed_roles benar
                     allowed = typeof menu.allowed_roles === 'string' ? JSON.parse(menu.allowed_roles) : menu.allowed_roles;
                 } catch(e) { allowed = []; }
 
-                // Jika role kosong, tampilkan untuk publik
+                // LOGIKA 1: Jika role kosong, tampilkan untuk publik
                 if (!allowed || allowed.length === 0) return true;
 
-                // Cek kecocokan role profil
+                // LOGIKA 2: GUEST BYPASS (Public Access)
+                // Jika menu mengandung role 'guest', maka semua role bisa melihatnya.
+                if (allowed.includes('guest')) return true;
+
+                // LOGIKA 3: Cek kecocokan role profil spesifik
                 return Array.isArray(allowed) && allowed.includes(userProfile.role);
             });
 
@@ -115,14 +118,12 @@ async function loadModule(name) {
         const module = await import(`../../modules/${name}.js?v=${Date.now()}`);
         contentArea.innerHTML = ''; 
 
-        // Inject profile ke modul
         if (module.initExplorer) {
             await module.initExplorer(contentArea, userProfile);
         } else if (module.init) {
             await module.init(contentArea, userProfile);
         }
         
-        // Update penanda aktif
         document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
         const btn = document.getElementById(`btn-nav-${name}`);
         if (btn) btn.classList.add('active');
@@ -148,7 +149,6 @@ function updateAuthUI() {
             </div>`;
         document.getElementById('btn-logout-action').onclick = async () => {
             if(confirm("Yakin ingin keluar?")) {
-                // Catat log logout sebelum keluar (Opsional)
                 await recordActivity('logout', { email: currentUser.email });
                 await supabase.auth.signOut();
             }
@@ -177,7 +177,6 @@ async function handleLogin() {
         btn.disabled = false; 
         btn.innerText = "Masuk Sekarang";
     } else {
-        // CATAT LOG LOGIN
         await recordActivity('login', { email: email });
         window.location.reload(); 
     }
