@@ -1,7 +1,7 @@
 /**
  * Project: Robopanda Client (Public/Student)
  * File: modules/gallery-module.js
- * Version: 4.6 - School Name in Dropdown (UX Fix)
+ * Version: 4.7 - Fix Private Watermark (Text Base) & Optimize Modal Image Size
  * Format: Plain Text (Huawei T10s Anti-Crash)
  */
 
@@ -64,7 +64,7 @@ function getFormattedCaption(index) {
     return `robopanda_${cleanDate}_${cleanMateri}_${noUrut}`;
 }
 
-// --- 3. SECURITY & DATA (UPDATED: SCHOOL NAME IN DROPDOWN) ---
+// --- 3. SECURITY & DATA ---
 async function loadClassesOrGroups() {
     const classSelect = document.getElementById('class-select');
     const wrapper = document.getElementById('class-filter-wrapper');
@@ -81,7 +81,6 @@ async function loadClassesOrGroups() {
     wrapper.style.display = 'block';
     classSelect.innerHTML = '<option disabled selected>Memuat...</option>';
 
-    // UPDATE: Menambahkan join schools(name) untuk konteks sekolah
     let query = currentContext === 'school' 
         ? supabase.from('classes').select('id, name, schools(name)') 
         : supabase.from('class_private').select('id, name, group_id');
@@ -96,9 +95,10 @@ async function loadClassesOrGroups() {
     if (data && data.length > 0) {
         classSelect.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
             data.map(c => {
-                // Tambahkan keterangan sekolah jika mode SCHOOL
-                const schoolSuffix = currentContext === 'school' ? ` (${c.schools?.name || 'Umum'})` : '';
-                return `<option value="${c.id}">${c.name}${schoolSuffix}</option>`;
+                const label = currentContext === 'school' 
+                    ? `${c.name} (${c.schools?.name || 'Umum'})` 
+                    : c.name;
+                return `<option value="${c.id}">${label}</option>`;
             }).join('');
     }
 }
@@ -147,19 +147,20 @@ function renderGalleryGrid() {
         let thumb = item.file_url;
         const captionAuto = getFormattedCaption(index);
         
+        // Grid tetap menggunakan thumbnail kecil 250px
         if (item.media_type === 'image') thumb = item.file_url.replace('/upload/', '/upload/w_250,q_auto,f_auto/');
         else if (item.media_type === 'youtube') thumb = `https://img.youtube.com/vi/${urlToId(item.file_url)}/mqdefault.jpg`;
 
         return `
             <div class="ug-card" onclick="window.openSwipeGallery(${index})">
-                <img src="${thumb}" loading="lazy">
+                <img src="${thumb}" loading="lazy" onerror="this.src='https://placehold.co/250x250?text=Error+Image'">
                 ${item.media_type === 'youtube' ? '<div class="yt-icon"><i class="fa-brands fa-youtube"></i></div>' : ''}
                 <div class="ug-caption">${captionAuto}</div>
             </div>`;
     }).join('');
 }
 
-// --- 5. SWIPE GALLERY ---
+// --- 5. SWIPE GALLERY (MODAL) ---
 window.openSwipeGallery = (startIndex) => {
     const lb = document.getElementById('lightbox');
     const content = document.getElementById('lb-content');
@@ -183,14 +184,19 @@ window.openSwipeGallery = (startIndex) => {
         <div class="ug-slider-container">
             ${slideData.map((item, idx) => {
                 const caption = getFormattedCaption(idx);
+                
+                // UPDATE PENTING: Watermark Teks untuk Private & Optimasi Ukuran
+                // Menggunakan Font Montserrat, Bold, Ukuran 30, Putih, Opacity 70% di Pojok Kanan Bawah
                 const watermark = currentContext === 'school' 
                     ? 'l_text:Arial_35_bold:Robopanda,g_south_east,x_20,y_20,co_white,o_50' 
-                    : 'l_Robopanda-Education_zwx0bm,w_130,g_south_east,x_20,y_20,o_70';
-                const finalImg = item.file_url.replace('/upload/', `/upload/w_1000,q_auto,f_auto,${watermark}/`);
+                    : 'l_text:Montserrat_30_bold:Robopanda%20Education,g_south_east,x_20,y_20,co_white,o_70';
+
+                // UPDATE PENTING: Mengurangi ukuran ke w_800 dan kualitas q_auto:eco agar ringan di tablet
+                const finalImg = item.file_url.replace('/upload/', `/upload/w_800,q_auto:eco,f_auto,${watermark}/`);
 
                 return `
                     <div class="ug-slide" id="slide-${idx}">
-                        ${item.media_type === 'video' ? `<video src="${item.file_url}" controls></video>` : `<img src="${finalImg}">`}
+                        ${item.media_type === 'video' ? `<video src="${item.file_url}" controls></video>` : `<img src="${finalImg}" onerror="this.src='https://placehold.co/800x600?text=Gagal+Memuat+Gambar'; this.style.objectFit='contain';">`}
                         <div class="lb-controls">
                             <span class="slide-label">${caption}</span>
                             <div style="display:flex; gap:10px;">
@@ -218,7 +224,7 @@ window.handleDownload = async (url, filename) => {
         a.download = `${filename}.jpg`;
         a.click();
         await recordActivity('download', { file: filename, context: currentContext });
-    } catch (e) { alert("Gagal download."); }
+    } catch (e) { alert("Gagal download. Coba lagi."); }
 };
 
 window.handleShare = async (title, url) => {
@@ -229,7 +235,7 @@ window.handleShare = async (title, url) => {
         } catch (e) {}
     } else {
         navigator.clipboard.writeText(url);
-        alert("Link disalin!");
+        alert("Link disalin ke clipboard!");
     }
 };
 
@@ -301,7 +307,7 @@ function injectStyles() {
         .tab-link.active { color: #4d97ff; border-bottom: 2px solid #4d97ff; }
         .ug-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
         @media (min-width: 900px) { .ug-grid { grid-template-columns: repeat(6, 1fr); } }
-        .ug-card { background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .ug-card { background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; min-height: 100px; background: #f0f0f0; }
         .ug-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; }
         .ug-caption { padding: 4px; font-size: 0.5rem; color: #64748b; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .lightbox-overlay { position: fixed; inset: 0; background: black; display: none; z-index: 9999; }
@@ -309,12 +315,12 @@ function injectStyles() {
         .ug-slider-container { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; width: 100%; height: 100vh; }
         .ug-slider-container::-webkit-scrollbar { display: none; }
         .ug-slide { min-width: 100%; height: 100%; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; }
-        .ug-slide img, .ug-slide video { max-width: 100%; max-height: 75vh; border-radius: 10px; }
+        .ug-slide img, .ug-slide video { max-width: 100%; max-height: 75vh; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         .lb-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 15px; width: 100%; }
         .slide-label { color: #cbd5e1; font-size: 0.75rem; font-family: monospace; }
-        .lb-controls button { padding: 12px 25px; border-radius: 30px; border: none; background: #3b82f6; color: white; font-weight: bold; }
+        .lb-controls button { padding: 12px 25px; border-radius: 30px; border: none; background: #3b82f6; color: white; font-weight: bold; cursor: pointer; }
         .lb-controls .btn-dl { background: #10b981; }
-        .loading-state { text-align: center; padding: 20px; color: #94a3b8; grid-column: 1/-1; }
+        .yt-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 2rem; opacity: 0.8; }
     `;
     document.head.appendChild(s);
 }
