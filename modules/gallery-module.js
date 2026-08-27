@@ -14,11 +14,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const LOGO_B64 = 'aHR0cHM6Ly9yZXMuY2xvdWRpbmFyeS5jb20vZG1tNmF2dHhkL2ltYWdlL3VwbG9hZC9Sb2JvcGFuZGEtRWR1Y2F0aW9uX3p3eDBibS5wbmc=';
 
 const CONFIG = {
-    // [BRANDING 30% SOLID]
-    // w_0.30   : Logo Besar (30% dari lebar foto)
+    // [BRANDING 45% SOLID]
+    // w_0.45   : Logo Besar (45% dari lebar foto)
     // o_100    : Solid/Jelas (Tidak transparan)
     // e_shadow:50 : Bayangan agar logo 'pop-up'
-    WATERMARK: `l_fetch:${LOGO_B64}/e_shadow:50,fl_layer_apply,g_south_east,x_30,y_30,w_0.30,o_100`,
+    WATERMARK: `l_fetch:${LOGO_B64}/e_shadow:50,fl_layer_apply,g_south_east,x_30,y_30,w_0.45,o_100`,
     
     TRANSFORM: {
         GRID: 'w_250,q_auto,f_auto',       // Thumbnail (Polos, Ringan)
@@ -137,21 +137,49 @@ async function loadSessions() {
 }
 
 async function loadGalleryContent() {
-    const col = currentContext === 'school' ? 'pertemuan_id' : 'pertemuan_private_id';
-    
-    const { data } = await supabase.from('gallery_contents')
-        .select('*')
-        .eq(col, activeSessionId)
-        .eq('is_published', true)
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: true });
-
-    rawGalleryData = data || [];
-    renderGalleryGrid();
-    
+    const grid = document.getElementById('ug-grid');
     const dlBtn = document.getElementById('btn-download-all');
-    if(dlBtn) dlBtn.style.display = (rawGalleryData.length > 0) ? 'inline-flex' : 'none';
+    if (!grid) return;
+
+    // 1. Loading skeleton sebelum fetch (P2)
+    grid.innerHTML = Array.from({ length: 12 }, () =>
+        '<div class="ug-skeleton"></div>'
+    ).join('');
+
+    const col = currentContext === 'school' ? 'pertemuan_id' : 'pertemuan_private_id';
+
+    // 2. Fetch dengan penanganan error
+    try {
+        const { data, error } = await supabase.from('gallery_contents')
+            .select('*')
+            .eq(col, activeSessionId)
+            .eq('is_published', true)
+            .eq('is_deleted', false)
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        rawGalleryData = data || [];
+    } catch (err) {
+        console.error("Gagal memuat galeri:", err);
+        rawGalleryData = [];
+        grid.innerHTML = `
+            <div class="empty-state ug-error-state">
+                <div class="ug-empty-emoji" aria-hidden="true">😵</div>
+                <p>Gagal memuat dokumentasi. Periksa koneksi kamu.</p>
+                <button class="btn-retry" onclick="window.retryGallery()">Coba Lagi</button>
+            </div>`;
+        if (dlBtn) dlBtn.style.display = 'none';
+        return;
+    }
+
+    renderGalleryGrid();
+
+    if (dlBtn) dlBtn.style.display = (rawGalleryData.length > 0) ? 'inline-flex' : 'none';
 }
+
+// Retry saat gagal memuat galeri
+window.retryGallery = () => { loadGalleryContent(); };
 
 // --- 5. RENDERERS ---
 function renderGalleryGrid() {
@@ -161,14 +189,21 @@ function renderGalleryGrid() {
     );
 
     if (filtered.length === 0) {
-        grid.innerHTML = '<div class="empty-state">Belum ada dokumentasi.</div>';
+        grid.innerHTML = `
+            <div class="empty-state">
+                <div class="ug-empty-emoji" aria-hidden="true">📭</div>
+                <p>Belum ada dokumentasi untuk topik ini.</p>
+            </div>`;
         return;
     }
 
     grid.innerHTML = filtered.map((item, index) => {
         return `
-            <div class="ug-card" onclick="window.openSwipeGallery(${index})">
-                <img src="${utils.getTransformUrl(item.file_url, 'GRID', false)}" loading="lazy" onerror="this.src='${CONFIG.PLACEHOLDER}'">
+            <div class="ug-card" role="button" tabindex="0"
+                 aria-label="Buka foto ${index + 1}"
+                 onclick="window.openSwipeGallery(${index})"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openSwipeGallery(${index});}">
+                <img src="${utils.getTransformUrl(item.file_url, 'GRID', false)}" loading="lazy" alt="Dokumentasi ${index + 1}" onerror="this.src='${CONFIG.PLACEHOLDER}'">
                 ${item.media_type === 'youtube' ? '<div class="yt-icon"><i class="fa-brands fa-youtube"></i></div>' : ''}
                 <div class="ug-caption">${utils.getSystemCaption(index)}</div>
             </div>`;
@@ -187,12 +222,29 @@ function ensureLightboxKeyboard() {
         if (e.key === 'Escape') { window.closeLightboxManual(); }
         else if (e.key === 'ArrowRight') { window.moveLightbox(1); }
         else if (e.key === 'ArrowLeft') { window.moveLightbox(-1); }
+        else if (e.key === 'Tab') { trapLightboxFocus(e); }
     });
 }
 
 // --- 6. SWIPE GALLERY (Instagram-style: single-slide + prev/next) ---
 let lbSlides = [];      // data slide non-youtube yang sedang terbuka
 let lbCurrent = -1;     // indeks slide aktif
+let lbLastFocused = null; // mengembalikan fokus yang dibuka sebelum lightbox
+
+function lbFocusables() {
+    const box = document.getElementById('lightbox');
+    if (!box) return [];
+    return [...box.querySelectorAll('button, [href], iframe, video')].filter(el => el.offsetParent !== null);
+}
+
+function trapLightboxFocus(e) {
+    const f = lbFocusables();
+    if (!f.length) return;
+    const first = f[0];
+    const last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
 
 function igMediaHTML(item) {
     return item.media_type === 'video'
@@ -225,6 +277,13 @@ function renderLightboxSlide(i) {
     if (counterEl) counterEl.textContent = `${i + 1} / ${lbSlides.length}`;
     if (prevBtn) prevBtn.style.display = (i === 0) ? 'none' : 'flex';
     if (nextBtn) nextBtn.style.display = (i === lbSlides.length - 1) ? 'none' : 'flex';
+
+    // Preload slide berikutnya agar perpindahan lebih cepat (P3)
+    const nextItem = lbSlides[i + 1];
+    if (nextItem && nextItem.media_type !== 'video') {
+        const pre = new Image();
+        pre.src = utils.getTransformUrl(nextItem.file_url, 'MODAL', true);
+    }
 }
 
 window.moveLightbox = (dir) => {
@@ -243,6 +302,7 @@ window.openSwipeGallery = (startIndex) => {
     ensureLightboxKeyboard();
     lb.style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    lbLastFocused = document.activeElement;
 
     if (clickedItem.media_type === 'youtube') {
         // [FIX] urlToId menangani watch?v=, youtu.be, embed, dan shorts sekaligus
@@ -253,6 +313,8 @@ window.openSwipeGallery = (startIndex) => {
         content.innerHTML = `
             <button class="lb-close-btn" onclick="window.closeLightboxManual()" aria-label="Tutup video">&times;</button>
             <div class="lb-inner"><iframe src="${embedUrl}" frameborder="0" allowfullscreen title="Video Materi"></iframe></div>`;
+        const ytClose = content.querySelector('.lb-close-btn');
+        if (ytClose) ytClose.focus();
         return;
     }
 
@@ -276,6 +338,8 @@ window.openSwipeGallery = (startIndex) => {
         </div>`;
 
     renderLightboxSlide(startIdx >= 0 ? startIdx : 0);
+    const lbClose = content.querySelector('.lb-close-btn');
+    if (lbClose) lbClose.focus();
 };
 
 // --- 7. ACTIONS ---
@@ -306,14 +370,24 @@ window.downloadAllPhotos = async () => {
 
         if(photos.length === 0) throw new Error("Tidak ada foto.");
 
-        for (let i = 0; i < photos.length; i++) {
-            const item = photos[i];
-            const url = utils.getTransformUrl(item.file_url, 'HD', true); 
-            const filename = `Foto_${i+1}.jpg`;
-            const imgBlob = await fetch(url).then(r => r.blob());
-            folder.file(filename, imgBlob);
-        }
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Menyiapkan unduhan...';
 
+        // Unduh paralel terbatas (3 sekaligus) + progres (P4)
+        const CONCURRENCY = 3;
+        let done = 0;
+        const queue = photos.map((item, idx) => async () => {
+            const url = utils.getTransformUrl(item.file_url, 'HD', true);
+            const imgBlob = await fetch(url).then(r => r.blob());
+            folder.file(`Foto_${idx + 1}.jpg`, imgBlob);
+            done++;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Mengunduh ${done}/${photos.length}...`;
+        });
+        const pool = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+            while (queue.length) { const tj = queue.shift(); await tj(); }
+        });
+        await Promise.all(pool);
+
+        btn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Membungkus ZIP...';
         const content = await zip.generateAsync({ type: "blob" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(content);
@@ -362,6 +436,8 @@ window.closeLightboxManual = () => {
     const lb = document.getElementById('lightbox');
     if (lb) lb.style.display = 'none';
     document.body.style.overflow = '';
+    if (lbLastFocused && lbLastFocused.focus) lbLastFocused.focus();
+    lbLastFocused = null;
 };
 
 window.switchGalleryContext = (ctx) => {
@@ -430,22 +506,28 @@ function injectStyles() {
     const s = document.createElement('style');
     s.id = 'ug-css';
     s.textContent = `
-        .ug-container { padding: 8px; max-width: 1000px; margin: 0 auto; font-family: 'Poppins', sans-serif; }
+        .ug-container { padding: 8px; max-width: 1000px; margin: 0 auto; font-family: inherit; }
         .ug-nav-switcher { display: flex; gap: 5px; margin-bottom: 10px; }
         .nav-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.8rem; font-weight: bold; background: white; outline: none; }
-        .nav-btn.active { background: #4d97ff; color: white; border-color: #4d97ff; }
+        .nav-btn.active { background: #2ecc71; color: white; border-color: #27ae60; box-shadow: 0 4px 12px rgba(46,204,113,.35); }
         .ug-filters { display: flex; gap: 8px; background: white; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; }
         .filter-group { flex: 1; }
-        .filter-group label { display: block; font-size: 0.6rem; color: #94a3b8; font-weight: bold; }
+        .filter-group label { display: block; font-size: 0.75rem; color: #475569; font-weight: 700; margin-bottom: 3px; }
         .filter-group select { width: 100%; padding: 6px; border-radius: 5px; border: 1px solid #cbd5e1; font-size: 0.8rem; outline: none; }
         .ug-tabs { display: flex; gap: 10px; margin-bottom: 10px; }
         .tab-link { padding: 8px; font-size: 0.8rem; font-weight: bold; color: #94a3b8; border: none; background: none; cursor: pointer; }
-        .tab-link.active { color: #4d97ff; border-bottom: 2px solid #4d97ff; }
+        .tab-link.active { color: #27ae60; border-bottom: 2px solid #2ecc71; }
         .ug-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
         @media (min-width: 900px) { .ug-grid { grid-template-columns: repeat(6, 1fr); } }
-        .ug-card { background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; position: relative; }
+        .ug-card { background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; position: relative; transition: transform .15s, box-shadow .15s; }
+        .ug-card:hover { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0,0,0,.12); }
         .ug-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; }
-        .ug-caption { padding: 4px; font-size: 0.5rem; color: #64748b; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ug-caption { padding: 6px; font-size: 0.75rem; color: #475569; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ug-skeleton { aspect-ratio: 1/1; background: linear-gradient(90deg,#eef2f7 25%,#f7f9fc 50%,#eef2f7 75%); background-size: 200% 100%; border-radius: 6px; animation: ugShimmer 1.4s ease-in-out infinite; }
+        @keyframes ugShimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+        .ug-empty-emoji { font-size: 2.4rem; margin-bottom: 8px; }
+        .btn-retry { margin-top: 10px; padding: 8px 22px; border: none; border-radius: 999px; background: #2ecc71; color: #fff; font-weight: 700; font-size: .85rem; cursor: pointer; box-shadow: 0 4px 10px rgba(46,204,113,.3); }
+        .ug-error-state { padding: 40px 16px; }
         
         .lightbox-overlay { position: fixed; inset: 0; background: black; display: none; z-index: 9999; align-items: center; justify-content: center; }
         .lb-close-btn { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; color: white; background: none; border: none; z-index: 10001; cursor: pointer; }
@@ -469,13 +551,13 @@ function injectStyles() {
             .ug-ig-media img, .ug-ig-media video { max-height: 62vh; }
         }
         
-        .lb-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 20px; width: 100%; }
         .btn-share-smart { padding: 12px 30px; border-radius: 30px; border: none; background: #25D366; color: white; font-weight: bold; font-size: 1rem; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,211,102,0.4); }
-        .btn-dl-simple { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; }
-        .btn-zip { background: #3b82f6; color: white; border: none; padding: 8px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-dl-simple { background: none; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 8px 18px; border-radius: 999px; cursor: pointer; font-size: 0.8rem; }
+        .btn-zip { background: linear-gradient(135deg,#2ecc71,#27ae60); color: white; border: none; padding: 9px 22px; border-radius: 999px; font-weight: bold; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 6px 14px rgba(46,204,113,.35); transition: transform .15s; }
+        .btn-zip:hover { transform: translateY(-2px); }
         
         .yt-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 2rem; opacity: 0.8; pointer-events: none; }
-        .empty-state { grid-column: 1/-1; text-align: center; padding: 40px; color: #94a3b8; font-size: 0.8rem; }
+        .empty-state { grid-column: 1/-1; text-align: center; padding: 40px 16px; color: #94a3b8; font-size: 0.85rem; line-height: 1.5; }
         .lb-inner { position: relative; width: min(92vw, 900px); aspect-ratio: 16 / 9; }
         .lb-inner iframe { width: 100%; height: 100%; border: 0; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); background: #000; }
     `;
