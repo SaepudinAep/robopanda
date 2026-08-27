@@ -81,7 +81,7 @@ const utils = {
             if (parts.length > 1) robotName = parts[1].trim();
         }
         // [UPDATE] Link Instagram ditambahkan di sini
-        return ` Project Keren: ${robotName}\n\nLihat nih hasil karya belajar hari ini! Seru banget merakit dan memprogram robot sendiri. \n\nPenasaran sama robot lainnya? Cek Instagram kami:\n https://instagram.com/robopandarobotic\n\n#Robopanda #CodingAnak #RobotikaIndonesia`;
+        return `🤖 Project Keren: ${robotName}\n\nLihat nih hasil karya belajar hari ini! Seru banget merakit dan memprogram robot sendiri. 🎉\n\nPenasaran sama robot lainnya? Cek Instagram kami:\n📸 https://instagram.com/robopandarobotic\n\n#Robopanda #CodingAnak #RobotikaIndonesia`;
     }
 };
 
@@ -176,54 +176,106 @@ function renderGalleryGrid() {
 }
 
 // --- 6. SWIPE GALLERY ---
+// [FIX] Esc menutup lightbox + scroll halaman belakang dikunci saat terbuka
+let lbEscBound = false;
+function ensureLightboxKeyboard() {
+    if (lbEscBound) return;
+    lbEscBound = true;
+    document.addEventListener('keydown', (e) => {
+        const box = document.getElementById('lightbox');
+        if (!box || box.style.display !== 'flex') return;
+        if (e.key === 'Escape') { window.closeLightboxManual(); }
+        else if (e.key === 'ArrowRight') { window.moveLightbox(1); }
+        else if (e.key === 'ArrowLeft') { window.moveLightbox(-1); }
+    });
+}
+
+// --- 6. SWIPE GALLERY (Instagram-style: single-slide + prev/next) ---
+let lbSlides = [];      // data slide non-youtube yang sedang terbuka
+let lbCurrent = -1;     // indeks slide aktif
+
+function igMediaHTML(item) {
+    return item.media_type === 'video'
+        ? `<video src="${item.file_url}" controls></video>`
+        : `<img src="${utils.getTransformUrl(item.file_url, 'MODAL', true)}" alt="Foto Dokumentasi" onerror="this.src='${CONFIG.PLACEHOLDER}'">`;
+}
+
+function renderLightboxSlide(i) {
+    const item = lbSlides[i];
+    if (!item) return;
+    lbCurrent = i;
+
+    const hdImg = utils.getTransformUrl(item.file_url, 'HD', true);
+    const socialText = utils.getSocialCaption();
+
+    const mediaEl = document.getElementById('lb-media');
+    const controlsEl = document.getElementById('lb-controls');
+    const counterEl = document.getElementById('lb-counter');
+    const prevBtn = document.getElementById('lb-prev');
+    const nextBtn = document.getElementById('lb-next');
+
+    if (mediaEl) mediaEl.innerHTML = igMediaHTML(item);
+    if (controlsEl) controlsEl.innerHTML = `
+            <button class="btn-share-smart" onclick="window.handleSmartShare('${hdImg}', \`${socialText}\`)">
+                <i class="fa-brands fa-whatsapp"></i> Share ke Medsos
+            </button>
+            <button onclick="window.handleDownload('${hdImg}', 'Robopanda_Foto')" class="btn-dl-simple">
+                <i class="fa-solid fa-download"></i> Simpan HD
+            </button>`;
+    if (counterEl) counterEl.textContent = `${i + 1} / ${lbSlides.length}`;
+    if (prevBtn) prevBtn.style.display = (i === 0) ? 'none' : 'flex';
+    if (nextBtn) nextBtn.style.display = (i === lbSlides.length - 1) ? 'none' : 'flex';
+}
+
+window.moveLightbox = (dir) => {
+    if (!lbSlides.length) return;
+    const next = lbCurrent + dir;
+    if (next < 0 || next >= lbSlides.length) return;
+    renderLightboxSlide(next);
+};
+
 window.openSwipeGallery = (startIndex) => {
     const lb = document.getElementById('lightbox');
     const content = document.getElementById('lb-content');
     const clickedItem = rawGalleryData[startIndex];
+    if (!lb || !content || !clickedItem) return;
 
+    ensureLightboxKeyboard();
     lb.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
 
     if (clickedItem.media_type === 'youtube') {
-        const embedUrl = clickedItem.file_url.replace('watch?v=', 'embed/');
+        // [FIX] urlToId menangani watch?v=, youtu.be, embed, dan shorts sekaligus
+        const videoId = utils.urlToId(clickedItem.file_url);
+        const embedUrl = videoId
+            ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`
+            : clickedItem.file_url;
         content.innerHTML = `
-            <button class="lb-close-btn" onclick="window.closeLightboxManual()">&times;</button>
-            <div class="lb-inner"><iframe src="${embedUrl}" frameborder="0" allowfullscreen></iframe></div>`;
+            <button class="lb-close-btn" onclick="window.closeLightboxManual()" aria-label="Tutup video">&times;</button>
+            <div class="lb-inner"><iframe src="${embedUrl}" frameborder="0" allowfullscreen title="Video Materi"></iframe></div>`;
         return;
     }
 
-    const slideData = rawGalleryData.filter(item => item.media_type !== 'youtube');
-    const initialSlideIdx = slideData.findIndex(d => d.id === clickedItem.id);
-    const socialText = utils.getSocialCaption();
+    lbSlides = rawGalleryData.filter(item => item.media_type !== 'youtube');
+    if (!lbSlides.length) return;
+
+    const startIdx = Math.max(0, lbSlides.findIndex(d => d.id === clickedItem.id));
 
     content.innerHTML = `
-        <button class="lb-close-btn" onclick="window.closeLightboxManual()">&times;</button>
-        <div class="ug-slider-container">
-            ${slideData.map((item, idx) => {
-                const previewImg = utils.getTransformUrl(item.file_url, 'MODAL', true);
-                const hdImg = utils.getTransformUrl(item.file_url, 'HD', true);
-
-                return `
-                    <div class="ug-slide" id="slide-${idx}">
-                        ${item.media_type === 'video' 
-                            ? `<video src="${item.file_url}" controls></video>` 
-                            : `<img src="${previewImg}" onerror="this.src='${CONFIG.PLACEHOLDER}'">`}
-                        
-                        <div class="lb-controls">
-                            <button class="btn-share-smart" onclick="window.handleSmartShare('${hdImg}', \`${socialText}\`)">
-                                <i class="fa-brands fa-whatsapp"></i> Share ke Medsos
-                            </button>
-                            <button onclick="window.handleDownload('${hdImg}', 'Robopanda_Foto')" class="btn-dl-simple">
-                                <i class="fa-solid fa-download"></i> Simpan HD
-                            </button>
-                        </div>
-                    </div>`;
-            }).join('')}
+        <div class="ug-ig-layout">
+            <button class="lb-close-btn" onclick="window.closeLightboxManual()" aria-label="Tutup">&times;</button>
+            <div class="ug-ig-top">
+                <span class="ug-ig-counter" id="lb-counter"></span>
+            </div>
+            <button class="lb-arrow lb-prev" id="lb-prev" onclick="window.moveLightbox(-1)" aria-label="Sebelumnya" aria-hidden="false">&#8249;</button>
+            <div class="ug-ig-stage">
+                <div class="ug-ig-media" id="lb-media"></div>
+                <div class="lb-controls-ig" id="lb-controls"></div>
+            </div>
+            <button class="lb-arrow lb-next" id="lb-next" onclick="window.moveLightbox(1)" aria-label="Berikutnya" aria-hidden="false">&#8250;</button>
         </div>`;
 
-    setTimeout(() => {
-        const target = document.getElementById(`slide-${initialSlideIdx}`);
-        if (target) target.scrollIntoView();
-    }, 100);
+    renderLightboxSlide(startIdx >= 0 ? startIdx : 0);
 };
 
 // --- 7. ACTIONS ---
@@ -306,13 +358,17 @@ window.handleDownload = async (url, filename) => {
     } catch (e) { alert("Gagal download."); }
 };
 
-window.closeLightboxManual = () => { document.getElementById('lightbox').style.display = 'none'; };
+window.closeLightboxManual = () => {
+    const lb = document.getElementById('lightbox');
+    if (lb) lb.style.display = 'none';
+    document.body.style.overflow = '';
+};
 
 window.switchGalleryContext = (ctx) => {
     currentContext = ctx;
     activeClassId = activeSessionId = null;
     loadClassesOrGroups();
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.innerText.toLowerCase().includes(ctx)));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.ctx === ctx));
 };
 
 window.handleClassChange = (id) => { activeClassId = id; loadSessions(); };
@@ -338,8 +394,8 @@ function renderLayout(container) {
     container.innerHTML = `
         <div class="ug-container">
             <div class="ug-nav-switcher">
-                ${canSeeSchool ? `<button class="nav-btn ${currentContext === 'school' ? 'active' : ''}" onclick="window.switchGalleryContext('school')">Sekolah</button>` : ''}
-                ${canSeePrivate ? `<button class="nav-btn ${currentContext === 'private' ? 'active' : ''}" onclick="window.switchGalleryContext('private')">Private</button>` : ''}
+                ${canSeeSchool ? `<button class="nav-btn ${currentContext === 'school' ? 'active' : ''}" data-ctx="school" onclick="window.switchGalleryContext('school')">Sekolah</button>` : ''}
+                ${canSeePrivate ? `<button class="nav-btn ${currentContext === 'private' ? 'active' : ''}" data-ctx="private" onclick="window.switchGalleryContext('private')">Private</button>` : ''}
             </div>
             
             <div class="ug-filters">
@@ -393,11 +449,25 @@ function injectStyles() {
         
         .lightbox-overlay { position: fixed; inset: 0; background: black; display: none; z-index: 9999; align-items: center; justify-content: center; }
         .lb-close-btn { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; color: white; background: none; border: none; z-index: 10001; cursor: pointer; }
-        
-        .ug-slider-container { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; width: 100%; height: 100vh; -webkit-overflow-scrolling: touch; }
-        .ug-slider-container::-webkit-scrollbar { display: none; }
-        .ug-slide { min-width: 100%; height: 100%; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box; }
-        .ug-slide img, .ug-slide video { max-width: 100%; max-height: 70vh; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+
+        /* Instagram-style single-slide lightbox */
+        .ug-ig-layout { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+        .ug-ig-top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: center; padding: 16px; z-index: 5; pointer-events: none; }
+        .ug-ig-counter { background: rgba(255,255,255,0.14); color: white; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px; padding: 6px 16px; border-radius: 999px; backdrop-filter: blur(6px); }
+        .ug-ig-stage { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; width: 100%; max-width: 92vw; height: 100%; }
+        .ug-ig-media { display: flex; align-items: center; justify-content: center; min-height: 0; }
+        .ug-ig-media img, .ug-ig-media video { max-width: 100%; max-height: 72vh; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); object-fit: contain; background: #000; }
+        .lb-controls-ig { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; flex-shrink: 0; }
+        .lb-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 10; width: 52px; height: 52px; border-radius: 50%; border: none; background: rgba(255,255,255,0.14); color: white; font-size: 2rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: background 0.2s ease; }
+        .lb-arrow:hover { background: rgba(255,255,255,0.3); }
+        .lb-prev { left: 16px; }
+        .lb-next { right: 16px; }
+        @media (max-width: 640px) {
+            .lb-arrow { width: 42px; height: 42px; font-size: 1.6rem; }
+            .lb-prev { left: 8px; }
+            .lb-next { right: 8px; }
+            .ug-ig-media img, .ug-ig-media video { max-height: 62vh; }
+        }
         
         .lb-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 20px; width: 100%; }
         .btn-share-smart { padding: 12px 30px; border-radius: 30px; border: none; background: #25D366; color: white; font-weight: bold; font-size: 1rem; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,211,102,0.4); }
@@ -406,6 +476,8 @@ function injectStyles() {
         
         .yt-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 2rem; opacity: 0.8; pointer-events: none; }
         .empty-state { grid-column: 1/-1; text-align: center; padding: 40px; color: #94a3b8; font-size: 0.8rem; }
+        .lb-inner { position: relative; width: min(92vw, 900px); aspect-ratio: 16 / 9; }
+        .lb-inner iframe { width: 100%; height: 100%; border: 0; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); background: #000; }
     `;
     document.head.appendChild(s);
 }

@@ -27,21 +27,27 @@ export async function init(container, userProfile) {
 }
 
 export async function initExplorer(container) {
-    // 1. Injeksi Struktur HTML (100% Persis Kode Bapak)
+    // 1. Injeksi Struktur HTML
     container.innerHTML = `
-        <div class="explorer-controls" style="position: sticky; top: 0; z-index: 100; background: var(--gray-50); padding: 10px 0;">
-            <div class="search-box" style="margin-bottom: 15px; width: 100%; max-width: 600px; margin-inline: auto;">
-                <input type="text" id="searchMateri" placeholder="Cari misi robotik..." style="width: 100%;" />
+        <div class="explorer-page-head">
+            <span class="explorer-eyebrow">Robopanda Explorer</span>
+            <h1 class="explorer-page-title">Jelajahi Misi Robotik 🤖</h1>
+            <p>Pilih level favorit atau cari misi untuk lihat hasil karya kelas terbaru.</p>
+        </div>
+
+        <div class="explorer-controls">
+            <div class="search-box">
+                <input type="text" id="searchMateri" placeholder="Cari misi robotik..." aria-label="Cari misi robotik" />
                 <span class="search-btn">🔍</span>
             </div>
-            <nav class="level-tabs" id="levelTabs">
+            <nav class="level-tabs" id="levelTabs" aria-label="Filter level">
                 <button class="tab-item active" data-level="all">Semua</button>
             </nav>
         </div>
 
         <section class="feed-section" id="live-missions-wrapper">
             <div class="section-header">
-                <h2>🚀 Misi Aktif <span class="badge-live">LIVE</span></h2>
+                <h2><span class="section-icon">🚀</span> Misi Aktif <span class="badge-live">LIVE</span></h2>
                 <p>Materi yang sedang dipelajari di kelas saat ini</p>
             </div>
             <div class="horizontal-scroll" id="live-missions-list"></div>
@@ -51,10 +57,10 @@ export async function initExplorer(container) {
 
         <div class="modal-overlay" id="modal-explorer">
             <div class="modal-content">
-                <button class="btn-close-modal" id="closeModal">&times; Tutup</button>
+                <button class="btn-close-modal" id="closeModal" aria-label="Tutup modal">&times;</button>
                 <div class="modal-hero">
-                    <img id="modal-image" src="" alt="Project Image" />
-                    <img id="modal-watermark" src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" class="modal-watermark" alt="Watermark" />
+                    <img id="modal-image" src="https://placehold.co/800x600?text=Robopanda" alt="" aria-hidden="true" />
+                    <img id="modal-watermark" src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" class="modal-watermark" alt="" aria-hidden="true" />
                     <div class="modal-overlay-info">
                         <span class="badge-level" id="modal-level">LEVEL</span>
                         <h2 id="modal-title" class="modal-title"></h2>
@@ -69,9 +75,24 @@ export async function initExplorer(container) {
         </div>
     `;
 
-    // 2. Inisialisasi Logic (Tetap Asli)
+    // 2. Inisialisasi Logic
     setupEventListeners();
+    showSkeletons();
     await loadInitialData();
+}
+
+// Skeleton saat memuat data
+function showSkeletons() {
+    const liveEl = document.getElementById("live-missions-list");
+    if (liveEl) {
+        liveEl.innerHTML = Array.from({ length: 4 }, (_, i) =>
+            `<div class="skeleton-card" style="min-width:260px; height:300px; animation-delay:${i * 0.15}s;"></div>`
+        ).join("");
+    }
+    const rows = document.getElementById("level-rows-container");
+    if (rows) {
+        rows.innerHTML = `<div class="keyformance-loading loading-placeholder" style="justify-content:center; padding: 40px;">Memuat kategori level…</div>`;
+    }
 }
 
 // =========================================
@@ -113,23 +134,41 @@ function renderCards(items, containerId) {
     const list = document.getElementById(containerId);
     if (!list) return;
 
+    if (!items.length) {
+        list.innerHTML = `<div class="empty-row"><span class="empty-emoji" aria-hidden="true">📭</span><p>Belum ada misi untuk kategori ini.</p></div>`;
+        return;
+    }
+
     list.innerHTML = items.map(item => {
         const tgl = new Date(item.tanggal).toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
-        const showWatermark = ["Robotic"].includes(item.level_kode);
+        const showWatermark = item.level_kode === "Robotic";
+        const levelIcon = getIconByLevel(item.level_kode);
+        const sourceIcon = item.source === "private" ? "🏠" : "🏫";
+        const sourceLabel = item.source === "private" ? "Private" : "Sekolah";
 
         const mediaDisplay = item.image_url ? `
-            <img src="${item.image_url}" class="card-img-main" loading="lazy" alt="${item.title}">
-            ${showWatermark ? `<img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" class="card-watermark" alt="Robopanda Watermark">` : ""}
-        ` : `<div class="card-icon-fallback">${getIconByLevel(item.level_kode)}</div>`;
+            <img src="${item.image_url}" class="card-img-main" loading="lazy" alt="Ilustrasi ${item.title}"
+                 onerror="this.src='https://placehold.co/400x400?text=' + encodeURIComponent('🤖')">
+            ${showWatermark ? `<img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" class="card-watermark" alt="" aria-hidden="true">` : ""}
+        ` : `<div class="card-icon-fallback">${levelIcon}</div>`;
 
         return `
-            <div class="materi-card" onclick="openModalExplorer('${item.id}', '${item.tanggal}', '${item.source}')">
+            <article class="materi-card" role="button" tabindex="0"
+                     data-id="${item.id}" data-tgl="${item.tanggal}" data-src="${item.source}"
+                     aria-label="Buka misi ${item.title}"
+                     onclick="openModalExplorer('${item.id}', '${item.tanggal}', '${item.source}')">
                 <div class="card-image">${mediaDisplay}</div>
                 <div class="card-content">
-                    <span class="level-badge">${item.level_kode} <strong> | ${item.title}</strong></span>
-                    <small> 📅 ${tgl} | ${item.source === "private" ? "🏠" : "🏫"}</small>
+                    <div class="card-topline">
+                        <span class="level-badge" data-level="${item.level_kode}">${levelIcon} ${item.level_kode}</span>
+                    </div>
+                    <h3 class="card-title">${item.title}</h3>
+                    <div class="card-meta">
+                        <span class="card-meta-item"><span class="ic" aria-hidden="true">${sourceIcon}</span> ${sourceLabel}</span>
+                        <span class="card-meta-item"><span class="ic" aria-hidden="true">📅</span> ${tgl}</span>
+                    </div>
                 </div>
-            </div>`;
+            </article>`;
     }).join("");
 }
 
@@ -152,7 +191,8 @@ async function loadLevelRows() {
     if (!container) return;
     container.innerHTML = "";
 
-    for (const lvl of allLevels) {
+    // Jalankan semua level secara paralel (bukan waterfall serial)
+    const results = await Promise.all(allLevels.map(async (lvl) => {
         const [resSekolah, resPrivate] = await Promise.all([
             supabase.from("pertemuan_kelas").select("tanggal, materi:materi_id!inner(id, title, description, image_url, level_id, levels!inner(kode))").eq("materi.level_id", lvl.id).order("tanggal", { ascending: false }).limit(15),
             supabase.from("pertemuan_private").select("tanggal, materi:materi_id!inner(id, judul, deskripsi, image_url, level_id, levels!inner(kode))").eq("materi.level_id", lvl.id).order("tanggal", { ascending: false }).limit(15),
@@ -162,17 +202,20 @@ async function loadLevelRows() {
 
         const unique = []; const map = new Map();
         combined.forEach(item => { if (!map.has(item.id)) { map.set(item.id, true); unique.push(item); } });
+        return { lvl, items: unique };
+    }));
 
-        if (unique.length > 0) {
+    results.forEach(({ lvl, items }) => {
+        if (items.length > 0) {
             const rowHtml = `
                 <section class="feed-section" id="row-${lvl.kode}">
-                    <div class="section-header"><h2>${getIconByLevel(lvl.kode)} ${lvl.kode} Recent History</h2></div>
+                    <div class="section-header"><h2><span class="section-icon">${getIconByLevel(lvl.kode)}</span> ${lvl.kode} <small>Recent History</small></h2></div>
                     <div class="horizontal-scroll" id="list-${lvl.id}" data-level-row="${lvl.kode}"></div>
                 </section>`;
             container.insertAdjacentHTML("beforeend", rowHtml);
-            renderCards(unique, `list-${lvl.id}`);
+            renderCards(items, `list-${lvl.id}`);
         }
-    }
+    });
 }
 
 function getIconByLevel(kode) {
@@ -204,6 +247,7 @@ function filterByLevel(kode, btn) {
         if (liveWrapper) liveWrapper.style.display = "block";
         allSections.forEach(s => {
             s.style.display = "block";
+            s.classList.remove("is-grid");
             const list = s.querySelector("[data-level-row]");
             if (list) { list.classList.add("horizontal-scroll"); list.classList.remove("grid-layout"); }
         });
@@ -212,6 +256,7 @@ function filterByLevel(kode, btn) {
         allSections.forEach(s => {
             if (s.id === `row-${kode}`) {
                 s.style.display = "block";
+                s.classList.add("is-grid"); // matikan fade-edge di grid
                 const list = s.querySelector("[data-level-row]");
                 if (list) { list.classList.remove("horizontal-scroll"); list.classList.add("grid-layout"); }
             } else { s.style.display = "none"; }
@@ -220,34 +265,78 @@ function filterByLevel(kode, btn) {
 }
 
 function setupEventListeners() {
-    // 1. Search Logic
+    // 1. Search Logic + status hasil
     const searchInput = document.getElementById("searchMateri");
+
+    function runSearch(q) {
+        const cards = document.querySelectorAll(".materi-card");
+        let shown = 0;
+        cards.forEach(card => {
+            const text = card.textContent.toLowerCase();
+            const match = !q || text.includes(q);
+            card.style.display = match ? "" : "none";
+            if (match) shown++;
+        });
+
+        // Sembunyikan section yang sudah tidak punya kartu terlihat
+        document.querySelectorAll(".feed-section").forEach(sec => {
+            const firstCard = sec.querySelector(".materi-card");
+            const visible = !firstCard || !![...sec.querySelectorAll(".materi-card")].find(c => c.style.display !== "none");
+            sec.style.display = visible ? "" : "none";
+        });
+
+        const status = document.getElementById("search-status");
+        if (status) {
+            if (!q) { status.style.display = "none"; status.textContent = ""; }
+            else {
+                status.style.display = "block";
+                status.textContent = shown === 0
+                    ? "Tidak ada misi yang cocok. Coba kata lain. 🔍"
+                    : `Menampilkan ${shown} misi yang cocok.`;
+            }
+        }
+    }
+
     if (searchInput) {
-        searchInput.addEventListener("input", (e) => {
-            const query = e.target.value.toLowerCase();
-            document.querySelectorAll(".materi-card").forEach(card => {
-                const text = card.textContent.toLowerCase();
-                card.style.display = text.includes(query) ? "block" : "none";
-            });
+        // placeholder status hasil pencarian di bawah controls
+        const status = document.createElement("div");
+        status.id = "search-status";
+        status.className = "search-status";
+        status.setAttribute("aria-live", "polite");
+        status.style.display = "none";
+        searchInput.closest(".explorer-controls")?.appendChild(status);
+
+        searchInput.addEventListener("input", (e) => runSearch(e.target.value.trim().toLowerCase()));
+    }
+
+    // 2. Modal: tutup tombol, backdrop, Esc
+    const modal = document.getElementById("modal-explorer");
+    const closeBtn = document.getElementById("closeModal");
+
+    function closeExplorerModal() {
+        if (modal) modal.classList.remove("active");
+        document.body.style.overflow = "";
+    }
+
+    if (closeBtn) closeBtn.onclick = closeExplorerModal;
+
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target.id === "modal-explorer") closeExplorerModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal.classList.contains('active')) closeExplorerModal();
         });
     }
 
-    // 2. Modal Logic (Safety Fix: Menghindari Global window.onclick)
-    const modal = document.getElementById("modal-explorer");
-    const closeBtn = document.getElementById("closeModal");
-    
-    if (closeBtn) {
-        closeBtn.onclick = () => {
-            modal.classList.remove("active");
-            document.body.style.overflow = "auto";
-        };
-    }
-
-    // Mengganti window.onclick menjadi listener pada elemen modal saja
-    modal.addEventListener('click', (e) => {
-        if (e.target.id === "modal-explorer") {
-            modal.classList.remove("active");
-            document.body.style.overflow = "auto";
+    // 3. Keyboard support untuk kartu (role=button)
+    document.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.materi-card')) {
+            const card = e.target.closest('.materi-card');
+            if (card.dataset.id) {
+                e.preventDefault();
+                openModalExplorer(card.dataset.id, card.dataset.tgl, card.dataset.src);
+            }
         }
     });
 }
@@ -256,18 +345,34 @@ function setupEventListeners() {
 window.openModalExplorer = async (materiId, tanggal, source) => {
     const modal = document.getElementById("modal-explorer");
     const table = source === "private" ? "materi_private" : "materi";
-    const { data } = await supabase.from(table).select("*, levels(kode)").eq("id", materiId).single();
-    if (!data) return;
+    const fallbackImg = "https://placehold.co/800x600?text=Robopanda";
 
-    const levelKode = data.levels?.kode || "ROBOTIC";
-    document.getElementById("modal-image").src = optimizeCloudinary(data.image_url);
-    document.getElementById("modal-watermark").style.display = levelKode === "Robotic" ? "block" : "none";
-    document.getElementById("modal-title").textContent = data.judul || data.title;
-    document.getElementById("modal-level").textContent = levelKode;
-    document.getElementById("modal-date").textContent = new Date(tanggal).toLocaleDateString("id-ID", { day:'numeric', month:'long', year:'numeric' });
-    document.getElementById("modal-description").textContent = data.deskripsi || data.description || "";
-    document.getElementById("modal-detail").textContent = data.detail || "";
+    let data = null;
+    try {
+        const res = await supabase.from(table).select("*, levels(kode)").eq("id", materiId).single();
+        data = res.data;
+    } catch (e) { data = null; }
 
-    modal.classList.add("active");
+    const imgEl = document.getElementById("modal-image");
+    if (imgEl) {
+        imgEl.onerror = () => { imgEl.onerror = null; imgEl.src = fallbackImg; };
+        imgEl.src = data && data.image_url ? optimizeCloudinary(data.image_url) : fallbackImg;
+    }
+
+    const levelKode = data?.levels?.kode || "ROBOTIC";
+    if (document.getElementById("modal-watermark")) {
+        document.getElementById("modal-watermark").style.display = levelKode === "Robotic" ? "block" : "none";
+    }
+    if (document.getElementById("modal-title")) document.getElementById("modal-title").textContent = data?.judul || data?.title || "Tanpa judul";
+    if (document.getElementById("modal-level")) document.getElementById("modal-level").textContent = levelKode;
+    if (document.getElementById("modal-date")) {
+        document.getElementById("modal-date").textContent = new Date(tanggal).toLocaleDateString("id-ID", { day:'numeric', month:'long', year:'numeric' });
+    }
+    if (document.getElementById("modal-description")) document.getElementById("modal-description").textContent = data?.deskripsi || data?.description || "Belum ada ringkasan untuk misi ini.";
+    if (document.getElementById("modal-detail")) document.getElementById("modal-detail").textContent = data?.detail || "Detail misi sedang disiapkan.";
+
+    if (modal) modal.classList.add("active");
     document.body.style.overflow = "hidden";
+    const closeBtn = document.getElementById("closeModal");
+    if (closeBtn) closeBtn.focus();
 };

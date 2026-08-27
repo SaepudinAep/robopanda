@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Learning - Robopanda</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Roboto&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Roboto', sans-serif;
+      background: #fff3d6;
+      color: #1e293b;
+    }
+    /* NAVBAR */
+    .navbar {
+      background: #ffab19;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .navbar h1 {
+      font-family: 'Fredoka One', cursive;
+      color: #fff;
+      margin: 0;
+    }
+    .nav-links a {
+      background: #4d97ff;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      text-decoration: none;
+      font-weight: bold;
+      margin-left: 10px;
+      transition: 0.3s;
+    }
+    .nav-links a:hover {
+      background: #ff661a;
+    }
+    /* HEADER */
+    header {
+      text-align: center;
+      padding: 60px 20px;
+      background: linear-gradient(135deg, #4d97ff, #ffab19);
+      color: white;
+    }
+    header h2 {
+      font-family: 'Fredoka One', cursive;
+      font-size: 2.2rem;
+      margin: 0;
+    }
+    header p {
+      margin-top: 10px;
+      font-size: 1.1rem;
+    }
+    /* GRID */
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      padding: 40px;
+      justify-content: center;
+    }
+    .card {
+      flex: 1;
+      min-width: 250px;
+      max-width: 300px;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 6px 10px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+    }
+    .card i {
+      font-size: 2.5em;
+      margin-bottom: 15px;
+      color: #4d97ff;
+    }
+    .card h3 {
+      font-family: 'Fredoka One', cursive;
+      margin-bottom: 10px;
+      color: #ff661a;
+    }
+    .card ul {
+      text-align: left;
+      padding-left: 20px;
+      margin: 0;
+    }
+    .card ul li {
+      margin-bottom: 8px;
+    }
+    .card a {
+      display: inline-block;
+      margin-top: 15px;
+      padding: 8px 16px;
+      background: #4d97ff;
+      color: #fff;
+      border-radius: 20px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .card a:hover {
+      background: #ffab19;
+    }
+    /* FOOTER */
+    footer {
+      background: #4d97ff;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+      margin-top: 40px;
+    }
+    footer a {
+      color: #ffab19;
+      margin: 0 8px;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <h1>Robopanda</h1>
+    <div class="nav-links">
+      <a href="index.html"><i class="fas fa-home"></i> Home</a>
+      <a href="learning.html"><i class="fas fa-graduation-cap"></i> Learning</a>
+    </div>
+  </nav>
+
+  <!-- HEADER -->
+  <header>
+    <h2>Learning Materials</h2>
+    <p>Pilih jalur belajar: Robotics atau Coding</p>
+  </header>
+
+  <!-- GRID -->
+  <div class="grid">
+    <!-- ROBOTIC: WEDO -->
+    <div class="card">
+      <i class="fas fa-cogs"></i>
+      <h3>LEGO WeDo</h3>
+      <ul>
+        <li>Introduction to WeDo</li>
+        <li>Building Simple Machines</li>
+        <li>Using Sensors</li>
+        <li>Project: Dancing Robot</li>
+      </ul>
+      <a href="wedo.html">Mulai</a>
+    </div>
+
+    <!-- ROBOTIC: YAHBOOM -->
+    <div class="card">
+      <i class="fas fa-robot"></i>
+      <h3>Yahboom Superbit</h3>
+      <ul>
+        <li>Getting Started with Micro:bit</li>
+        <li>Motor Control Basics</li>
+        <li>Sensor Integration</li>
+        <li>Project: Smart Car</li>
+      </ul>
+      <a href="yahboom.html">Mulai</a>
+    </div>
+
+    <!-- CODING: SCRATCH -->
+    <div class="card">
+      <i class="fas fa-gamepad"></i>
+      <h3>Scratch</h3>
+      <ul>
+        <li>Scratch Interface</li>
+        <li>Sprites & Costumes</li>
+        <li>Events & Motion</li>
+        <li>Project: Simple Platformer</li>
+      </ul>
+      <a href="scratch/scratch.html">Mulai</a>
+    </div>
+
+    <!-- CODING: SCRATCH JR -->
+    <div class="card">
+      <i class="fas fa-cat"></i>
+      <h3>Scratch Jr</h3>
+      <ul>
+        <li>Getting Started</li>
+        <li>Storytelling with Blocks</li>
+        <li>Basic Animations</li>
+        <li>Project: Interactive Story</li>
+      </ul>
+      <a href="scratchjr.html">Mulai</a>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2026 Robopanda Robotic & Coding</p>
+    <p>
+      <a href="#"><i class="fab fa-instagram"></i></a>
+      <a href="#"><i class="fab fa-youtube"></i></a>
+      <a href="mailto:info@robopanda.com"><i class="fas fa-envelope"></i></a>
+    </p>
+  </footer>
+
+</body>
+</html>
