@@ -17,17 +17,23 @@ import { supabaseUrl, supabaseKey } from '../assets/js/config.js';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// [UX] Kunci penyimpanan pilihan filter terakhir,
+// agar tidak perlu memilih ulang Tahun Ajaran -> Semester -> Kelas setiap buka modul.
+const RK_LAST_FILTER_KEY = 'rekap_absensi_last_filter';
+
+// ---------------------------------------------------------------
 // ---------------------------------------------------------------
 // STATE
 // ---------------------------------------------------------------
 let app = {
     userProfile: null,      // profil dari user_profiles (role mapping)
     onBack: null,           // callback kembali ke gallery
+    initialClassId: null,   // kelas yang diteruskan dari Gallery jika ada
     activeClass: null,      // { id, name, jadwal, level, schoolName }
     students: [],           // [{ id, name, grade }] siswa kelas aktif
     pertemuanList: [],      // [{ id, tanggal, judul, uraian }] urut ascending
     attendance: [],         // baris attendance (semua pertemuan) untuk kelas ini
-    activeTab: 'absensi'    // tab yang sedang tampil
+    activeTab: 'absensi'    // tab yang sedang tampil ('absensi' | 'materi')
 };
 
 // ---------------------------------------------------------------
@@ -36,6 +42,7 @@ let app = {
 export async function init(canvas, opts = {}) {
     app.userProfile = opts.userProfile || { role: 'guest' };
     app.onBack = opts.onBack || null;
+    app.initialClassId = opts.initialClassId || null;
     app.activeClass = null;
     app.pertemuanList = [];
     app.activeTab = 'absensi';
@@ -45,108 +52,135 @@ export async function init(canvas, opts = {}) {
     canvas.innerHTML = `
         <div class="rk-container">
             <div class="rk-top">
-                <h2>📋 Rekapitulasi Absensi</h2>
-                <button id="rk-back" class="rk-btn rk-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Kembali</button>
+                <div class="rk-title-area">
+                    <h2>📋 Rekapitulasi Absensi</h2>
+                    <span class="rk-active-term-badge" id="rk-active-term-label">Memuat Semester...</span>
+                </div>
+                <button id="rk-back" class="rk-btn rk-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Kembali ke Galeri</button>
             </div>
 
+            <!-- Filter Cepat: Langsung Pilih Kelas (Semester Aktif Terpilih Otomatis) -->
             <section class="rk-card rk-search">
-                <div class="rk-filter-grid">
-                    <div class="rk-field">
-                        <label>Tahun Ajaran</label>
-                        <select id="rk-year" class="rk-input"></select>
+                <div class="rk-filter-row">
+                    <div class="rk-field rk-field-class">
+                        <label><i class="fa-solid fa-chalkboard-user"></i> Pilih Kelas</label>
+                        <select id="rk-class" class="rk-input">
+                            <option value="" disabled selected>Memuat daftar kelas...</option>
+                        </select>
                     </div>
-                    <div class="rk-field">
-                        <label>Semester</label>
-                        <select id="rk-semester" class="rk-input"></select>
-                    </div>
-                    <div class="rk-field">
-                        <label>Pilih Kelas</label>
-                        <select id="rk-class" class="rk-input"></select>
-                    </div>
-                    <div class="rk-field rk-field-btn">
-                        <button id="rk-load" class="rk-btn rk-btn-primary" style="width:100%;">
-                            <i class="fa-solid fa-magnifying-glass"></i> TAMPILKAN
-                        </button>
+                    <div class="rk-field rk-field-period-toggle">
+                        <label><i class="fa-solid fa-calendar-days"></i> Semester</label>
+                        <div class="rk-period-box">
+                            <select id="rk-semester" class="rk-input-period"></select>
+                            <select id="rk-year" class="rk-input-period" style="display:none;"></select>
+                            <button id="rk-toggle-all-years" class="rk-btn-link" title="Ganti Tahun Ajaran">Ubah TA</button>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <div class="rk-card rk-report-header" id="rk-report-header" style="display:none; text-align:center;">
-                <h2 id="rk-school" style="font-family:'Fredoka One', cursive; color:#4d97ff; margin:0; font-size:1.2rem;">-</h2>
-                <div class="rk-meta" id="rk-meta-year"></div>
-                <div class="rk-meta rk-meta-bold" id="rk-meta-class"></div>
+            <!-- Ringkasan & Header Laporan -->
+            <div class="rk-card rk-report-header" id="rk-report-header" style="display:none;">
+                <div class="rk-header-main">
+                    <div>
+                        <h2 id="rk-school" class="rk-school-title">-</h2>
+                        <div class="rk-meta" id="rk-meta-class"></div>
+                        <div class="rk-meta-sub" id="rk-meta-year"></div>
+                    </div>
+                    <div class="rk-stats-badges" id="rk-stats-badges"></div>
+                </div>
             </div>
 
+            <!-- Kontrol Tab & Rentang Pertemuan -->
             <div class="rk-card rk-control" id="rk-control" style="display:none;">
                 <div class="rk-tabs">
-                    <button class="rk-tab active" id="rk-tab-absensi">Absensi</button>
-                    <button class="rk-tab" id="rk-tab-pembelajaran">Pembelajaran</button>
-                    <button class="rk-tab" id="rk-tab-materi">Silabus/Materi Terajarkan</button>
+                    <button class="rk-tab active" id="rk-tab-absensi"><i class="fa-solid fa-clipboard-check"></i> Absensi</button>
+                    <button class="rk-tab" id="rk-tab-materi"><i class="fa-solid fa-book-open"></i> Silabus / Materi Terajarkan</button>
                 </div>
                 <div class="rk-range">
-                    <label>Rentang:</label>
+                    <label><i class="fa-solid fa-sliders"></i> Rentang Sesi:</label>
                     <select id="rk-range-start" class="rk-input-mini"></select>
                     <span>s/d</span>
                     <select id="rk-range-end" class="rk-input-mini"></select>
                 </div>
             </div>
 
+            <!-- Bagian Tabel Laporan (Hanya Absensi & Materi) -->
             <section class="rk-section" id="rk-section-absensi" style="display:none;">
-                <table class="rk-table" id="rk-table-absensi"></table>
-            </section>
-            <section class="rk-section" id="rk-section-pembelajaran" style="display:none;">
-                <table class="rk-table" id="rk-table-pembelajaran"></table>
+                <div class="rk-table-wrapper">
+                    <table class="rk-table" id="rk-table-absensi"></table>
+                </div>
             </section>
             <section class="rk-section" id="rk-section-materi" style="display:none;">
-                <table class="rk-table" id="rk-table-materi"></table>
+                <div class="rk-table-wrapper">
+                    <table class="rk-table" id="rk-table-materi"></table>
+                </div>
             </section>
         </div>`;
 
     setupEvents();
-    await loadAcademicYears();
+    await loadInitialTermsAndClasses();
 }
 
 // ---------------------------------------------------------------
-// 2. DROPDOWN CHAIN (Tahun Ajaran -> Semester -> Kelas)
+// 2. SMART DATA LOADING (Auto-Active Term -> Fast Class List)
 // ---------------------------------------------------------------
-async function loadAcademicYears() {
-    const sel = document.getElementById('rk-year');
-    const { data, error } = await supabase
-        .from('academic_years')
-        .select('id, year, is_active')
-        .order('year', { ascending: false });
+async function loadInitialTermsAndClasses() {
+    try {
+        // 1. Ambil Tahun Ajaran
+        const { data: years, error: yErr } = await supabase
+            .from('academic_years')
+            .select('id, year, is_active')
+            .order('year', { ascending: false });
 
-    if (error) return alert('Gagal memuat tahun ajaran: ' + error.message);
+        if (yErr) throw yErr;
 
-    sel.innerHTML = (data || []).map(y =>
-        `<option value="${y.id}" ${y.is_active ? 'selected' : ''}>${escapeHtml(y.year)}${y.is_active ? ' (Aktif)' : ''}</option>`
-    ).join('');
+        const selYear = document.getElementById('rk-year');
+        selYear.innerHTML = (years || []).map(y =>
+            `<option value="${y.id}" ${y.is_active ? 'selected' : ''}>${escapeHtml(y.year)}${y.is_active ? ' (Aktif)' : ''}</option>`
+        ).join('');
 
-    await isiDropdownSemester();
-}
+        // Cari tahun aktif (atau tahun pertama)
+        const activeYear = (years || []).find(y => y.is_active) || years?.[0];
+        if (!activeYear) return;
 
-async function isiDropdownSemester() {
-    const yid = document.getElementById('rk-year').value;
-    const selSem = document.getElementById('rk-semester');
-    selSem.innerHTML = '';
-    document.getElementById('rk-class').innerHTML = '';
-    hideReport(); // laporan lama ikut disembunyikan
+        // 2. Ambil Semester di tahun tersebut
+        const { data: semesters, error: sErr } = await supabase
+            .from('semesters')
+            .select('id, name, is_active, academic_year_id')
+            .eq('academic_year_id', activeYear.id)
+            .order('name');
 
-    if (!yid) return;
+        if (sErr) throw sErr;
 
-    const { data, error } = await supabase
-        .from('semesters')
-        .select('id, name, is_active')
-        .eq('academic_year_id', yid)
-        .order('name');
+        const selSem = document.getElementById('rk-semester');
+        selSem.innerHTML = (semesters || []).map(s =>
+            `<option value="${s.id}" ${s.is_active ? 'selected' : ''}>${escapeHtml(s.name)}${s.is_active ? ' (Aktif)' : ''}</option>`
+        ).join('');
 
-    if (error) return alert('Gagal memuat semester: ' + error.message);
+        const activeSemester = (semesters || []).find(s => s.is_active) || semesters?.[0];
 
-    selSem.innerHTML = (data || []).map(s =>
-        `<option value="${s.id}" ${s.is_active ? 'selected' : ''}>${escapeHtml(s.name)}${s.is_active ? ' (Aktif)' : ''}</option>`
-    ).join('');
+        // Tampilkan badge semester aktif di header
+        const termLabel = document.getElementById('rk-active-term-label');
+        if (termLabel) {
+            termLabel.textContent = `${activeYear.year} • ${activeSemester ? activeSemester.name : 'Semester'}`;
+        }
 
-    await isiDropdownKelas();
+        // 3. Langsung isi daftar kelas untuk semester ini
+        await isiDropdownKelas();
+
+        // 4. Jika ada initialClassId dari Galeri atau tersimpan di localStorage, buka langsung
+        if (app.initialClassId && hasOption(document.getElementById('rk-class'), app.initialClassId)) {
+            document.getElementById('rk-class').value = app.initialClassId;
+            await handleLoadRekap();
+        } else {
+            await restoreLastFilter();
+        }
+
+    } catch (err) {
+        console.error("Gagal inisialisasi filter rekap:", err);
+        alert('Gagal memuat filter rekap: ' + err.message);
+    }
 }
 
 async function isiDropdownKelas() {
@@ -162,7 +196,6 @@ async function isiDropdownKelas() {
         .eq('semester_id', sid)
         .order('name');
 
-    // Role PIC dibatasi ke sekolahnya (mapping user_profiles)
     if (app.userProfile.role === 'pic' && app.userProfile.school_id) {
         query = query.eq('school_id', app.userProfile.school_id);
     }
@@ -170,8 +203,14 @@ async function isiDropdownKelas() {
     const { data, error } = await query;
     if (error) return alert('Gagal memuat kelas: ' + error.message);
 
+    if (!data || data.length === 0) {
+        selClass.innerHTML = '<option value="" disabled selected>Tidak ada kelas di semester ini</option>';
+        hideReport();
+        return;
+    }
+
     selClass.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' +
-        (data || []).map(c =>
+        data.map(c =>
             `<option value="${c.id}" data-name="${escapeHtml(c.name)}" data-jadwal="${escapeHtml(c.jadwal || '')}" data-level="${escapeHtml(c.level || '')}" data-school="${escapeHtml(c.schools?.name || '')}">
                 ${escapeHtml(c.name)}${c.schools?.name ? ' (' + escapeHtml(c.schools.name) + ')' : ''}
             </option>`
@@ -181,12 +220,41 @@ async function isiDropdownKelas() {
 }
 
 // ---------------------------------------------------------------
-// 3. TAMPILKAN (muat header + rentang pertemuan + tab aktif)
+// 2b. REMEMBER FILTER & AUTO RESTORE
+// ---------------------------------------------------------------
+function saveLastFilter() {
+    try {
+        localStorage.setItem(RK_LAST_FILTER_KEY, JSON.stringify({
+            yearId: document.getElementById('rk-year').value,
+            semesterId: document.getElementById('rk-semester').value,
+            classId: document.getElementById('rk-class').value
+        }));
+    } catch (_) { }
+}
+
+function hasOption(sel, value) {
+    return Array.from(sel.options).some(o => o.value === value);
+}
+
+async function restoreLastFilter() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(RK_LAST_FILTER_KEY) || 'null'); } catch (_) { saved = null; }
+    if (!saved) return;
+
+    const selClass = document.getElementById('rk-class');
+    if (saved.classId && hasOption(selClass, saved.classId)) {
+        selClass.value = saved.classId;
+        await handleLoadRekap();
+    }
+}
+
+// ---------------------------------------------------------------
+// 3. LOAD REKAP DATA
 // ---------------------------------------------------------------
 async function handleLoadRekap() {
     const selClass = document.getElementById('rk-class');
     const cls = selClass.value;
-    if (!cls) return alert('Pilih kelas dulu.');
+    if (!cls) return;
 
     const opt = selClass.selectedOptions[0];
     app.activeClass = {
@@ -200,21 +268,21 @@ async function handleLoadRekap() {
     fillReportHeader();
     document.getElementById('rk-range-start').innerHTML = '<option value="-1">Memuat...</option>';
     document.getElementById('rk-range-end').innerHTML = '<option value="-1">Memuat...</option>';
-    await loadClassData();
+    
+    if (!(await loadClassData())) return;
+    saveLastFilter();
 
-    // Default ke tab Absensi
     app.activeTab = 'absensi';
     showSection('rk-section-absensi');
     updateActiveBtn('rk-tab-absensi');
     renderAbsensiWorksheet();
 }
 
-// Muat semua data kelas sekaligus (siswa, pertemuan, absensi) lalu render di client
 async function loadClassData() {
     const [rStudents, rPert, rAtt] = await Promise.all([
-        supabase.from('students').select('id, name, grade').eq('class_id', app.activeClass.id).eq('is_active', true).order('name'),
+        supabase.from('students').select('id, name, grade').eq('class_id', app.activeClass.id).eq('is_active', true).order('grade').order('name'),
         supabase.from('pertemuan_kelas').select('id, tanggal, materi(title, description, detail)').eq('class_id', app.activeClass.id).order('tanggal', { ascending: true }),
-        supabase.from('attendance').select('id, status, sikap, fokus, achievement, student_id, pertemuan_id, student:student_id(name, grade), pertemuan:pertemuan_id!inner(tanggal, materi:materi_id(title))').eq('pertemuan.class_id', app.activeClass.id)
+        supabase.from('attendance').select('id, status, student_id, pertemuan_id, student:student_id(name, grade), pertemuan:pertemuan_id!inner(tanggal, materi:materi_id(title))').eq('pertemuan.class_id', app.activeClass.id)
     ]);
 
     if (rStudents.error) return alert('Gagal memuat siswa: ' + rStudents.error.message);
@@ -230,16 +298,21 @@ async function loadClassData() {
     }));
     app.attendance = rAtt.data || [];
 
-    // Gabungkan siswa yang tercatat di absensi tapi tidak ada di daftar aktif
+    // Gabungkan siswa yang tercatat di absensi tapi belum ada di list aktif
     const seen = new Map(app.students.map(s => [s.id, s]));
     app.attendance.forEach(r => {
         if (r.student && !seen.has(r.student_id)) {
             seen.set(r.student_id, { id: r.student_id, name: r.student.name || '', grade: r.student.grade || '' });
         }
     });
-    app.students = [...seen.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    app.students = [...seen.values()].sort((a, b) =>
+        String(a.grade || '').localeCompare(String(b.grade || '')) ||
+        String(a.name).localeCompare(String(b.name))
+    );
 
     populateRange();
+    updateStatsBadges();
+    return true;
 }
 
 function fillReportHeader() {
@@ -247,19 +320,45 @@ function fillReportHeader() {
     const semOpt = document.getElementById('rk-semester').selectedOptions[0];
 
     document.getElementById('rk-school').textContent = app.activeClass.schoolName || 'Sekolah';
-    document.getElementById('rk-meta-year').textContent =
-        `${yearOpt ? yearOpt.textContent : '-'}  |  ${semOpt ? semOpt.textContent : '-'}`;
     document.getElementById('rk-meta-class').textContent =
-        `Kelas ${app.activeClass.name}  |  Jadwal: ${app.activeClass.jadwal || '-'}`;
+        `Kelas ${app.activeClass.name}  ${app.activeClass.level ? '• Level: ' + app.activeClass.level : ''}  |  Jadwal: ${app.activeClass.jadwal || '-'}`;
+    document.getElementById('rk-meta-year').textContent =
+        `${yearOpt ? yearOpt.textContent : ''} • ${semOpt ? semOpt.textContent : ''}`;
 
     document.getElementById('rk-report-header').style.display = 'block';
     document.getElementById('rk-control').style.display = 'block';
 }
 
+function updateStatsBadges() {
+    const statsContainer = document.getElementById('rk-stats-badges');
+    if (!statsContainer) return;
+
+    const totalStudents = app.students.length;
+    const totalSessions = app.pertemuanList.length;
+
+    // Hitung rata-rata kehadiran keseluruhan
+    let totalPresent = 0;
+    let totalRecords = 0;
+    app.attendance.forEach(a => {
+        if (a.status !== null && a.status !== undefined && a.status !== 0 && a.status !== '0') {
+            totalRecords++;
+            if (String(a.status) === '1') totalPresent++;
+        }
+    });
+
+    const avgRate = totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : 0;
+
+    statsContainer.innerHTML = `
+        <div class="rk-stat-pill"><span class="rk-stat-num">${totalStudents}</span> <span class="rk-stat-lbl">Siswa</span></div>
+        <div class="rk-stat-pill"><span class="rk-stat-num">${totalSessions}</span> <span class="rk-stat-lbl">Sesi</span></div>
+        <div class="rk-stat-pill rk-stat-highlight"><span class="rk-stat-num">${avgRate}%</span> <span class="rk-stat-lbl">Rata-rata Hadir</span></div>
+    `;
+}
+
 function hideReport() {
     document.getElementById('rk-report-header').style.display = 'none';
     document.getElementById('rk-control').style.display = 'none';
-    ['rk-section-absensi', 'rk-section-pembelajaran', 'rk-section-materi'].forEach(id => {
+    ['rk-section-absensi', 'rk-section-materi'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -269,19 +368,18 @@ function hideReport() {
 }
 
 // ---------------------------------------------------------------
-// 4. RENTANG PERTEMUAN (select awal s/d akhir)
+// 4. RENTANG PERTEMUAN
 // ---------------------------------------------------------------
 function populateRange() {
-    const opts = '<option value="-1">Semua</option>' +
+    const opts = '<option value="-1">Semua Sesi (' + app.pertemuanList.length + ')</option>' +
         app.pertemuanList.map((p, i) =>
-            `<option value="${i}">${fmtDate(p.tanggal)} • ${escapeHtml(p.judul)}</option>`
+            `<option value="${i}">Sesi ${i + 1}: ${fmtDate(p.tanggal)} • ${escapeHtml(p.judul)}</option>`
         ).join('');
 
     document.getElementById('rk-range-start').innerHTML = opts;
     document.getElementById('rk-range-end').innerHTML = opts;
 }
 
-// Mengembalikan daftar pertemuan dalam rentang yang dipilih (Semua jika -1/-1)
 function getRangePertemuanList() {
     const start = parseInt(document.getElementById('rk-range-start').value, 10);
     const end = parseInt(document.getElementById('rk-range-end').value, 10);
@@ -296,160 +394,117 @@ function getRangePertemuanList() {
 }
 
 // ---------------------------------------------------------------
-// 5. TAB ABSENSI (data attendance sesuai database, apa adanya)
+// 5. TAB ABSENSI (Dengan Baris Total Hadir di Footer)
 // ---------------------------------------------------------------
-async function loadRekapAbsensi() {
+function renderAbsensiWorksheet() {
     const table = document.getElementById('rk-table-absensi');
-    const ids = getRangePertemuanIds();
+    const sessions = getRangePertemuanList();
+    const totalStudents = app.students.length;
 
-    let query = supabase
-        .from('attendance')
-        .select('id, tanggal, status, sikap, fokus, achievement, student:student_id(name, grade), pertemuan:pertemuan_id!inner(tanggal, materi:materi_id(title))')
-        .eq('pertemuan.class_id', app.activeClass.id)
-        .order('tanggal', { ascending: true });
-
-    if (ids) query = query.in('pertemuan_id', ids);
-
-    const { data, error } = await query;
-    if (error) return alert('Gagal memuat data absensi: ' + error.message);
-
-    const rows = (data || []).slice().sort((a, b) =>
-        (a.tanggal + '').localeCompare(b.tanggal + '') ||
-        String(a.student?.name || '').localeCompare(String(b.student?.name || ''))
-    );
-
-    if (!rows.length) {
+    if (!sessions.length || !totalStudents) {
         table.innerHTML = `<thead><tr><th>Absensi</th></tr></thead>
             <tbody><tr><td class="rk-empty">Belum ada data absensi untuk kelas/rentang ini.</td></tr></tbody>`;
         return;
     }
 
-    table.innerHTML = `<thead><tr>
-        <th width="40">No</th>
-        <th>Tanggal</th>
-        <th>Nama Siswa</th>
-        <th>Materi</th>
-        <th width="70">Status</th>
-        <th width="70">Sikap</th>
-        <th width="70">Fokus</th>
-        <th>Keterangan</th>
-    </tr></thead><tbody>` +
-        rows.map((r, i) => `<tr>
-            <td>${i + 1}</td>
-            <td style="white-space:nowrap;">${escapeHtml(fmtDateLong(r.tanggal))}</td>
-            <td>${escapeHtml(r.student?.name || '-')}${r.student?.grade ? ' <span class="rk-tag">' + escapeHtml(r.student.grade) + '</span>' : ''}</td>
-            <td>${escapeHtml(r.pertemuan?.materi?.title || '-')}</td>
-            <td class="rk-center">${escapeHtml(r.status ?? '-')}</td>
-            <td class="rk-center">${escapeHtml(r.sikap ?? '-')}</td>
-            <td class="rk-center">${escapeHtml(r.fokus ?? '-')}</td>
-            <td>${escapeHtml(r.achievement || '-')}</td>
-        </tr>`).join('') + `</tbody>`;
+    // Peta (student_id|pertemuan_id) -> record
+    const byKey = new Map();
+    app.attendance.forEach(r => byKey.set(r.student_id + '|' + r.pertemuan_id, r));
+
+    // Hitung total hadir per kolom pertemuan
+    const presentPerSession = sessions.map(s => {
+        let count = 0;
+        app.students.forEach(st => {
+            const rec = byKey.get(st.id + '|' + s.id);
+            if (rec && String(rec.status) === '1') {
+                count++;
+            }
+        });
+        return count;
+    });
+
+    const thead = `<thead><tr>
+        <th class="rk-sticky rk-col-no" width="40">No</th>
+        <th class="rk-sticky rk-col-name rk-left">Nama Siswa</th>
+        <th class="rk-sticky rk-col-grade rk-left">Grade</th>
+        ${sessions.map((s, idx) =>
+            `<th class="rk-session-header" title="${escapeHtml(fmtDateLong(s.tanggal))} • ${escapeHtml(s.judul)}">
+                <span class="rk-session-num">Sesi ${idx + 1}</span>
+                <span class="rk-session-date">${escapeHtml(fmtDate(s.tanggal))}</span>
+            </th>`
+        ).join('')}
+    </tr></thead>`;
+
+    const tbody = `<tbody>` + app.students.map((st, i) => {
+        const cells = sessions.map(s => {
+            const rec = byKey.get(st.id + '|' + s.id);
+            return `<td class="rk-center">${ikonAbsensi(rec?.status)}</td>`;
+        }).join('');
+        return `<tr>
+            <td class="rk-sticky rk-col-no">${i + 1}</td>
+            <td class="rk-sticky rk-col-name rk-left">${escapeHtml(st.name)}</td>
+            <td class="rk-sticky rk-col-grade rk-left">${escapeHtml(st.grade || '-')}</td>
+            ${cells}
+        </tr>`;
+    }).join('') + `</tbody>`;
+
+    // [BARIS TOTAL SISWA HADIR DI FOOTER]
+    const tfoot = `<tfoot>
+        <tr class="rk-foot-total">
+            <td class="rk-sticky rk-col-no"><i class="fa-solid fa-check-double"></i></td>
+            <td class="rk-sticky rk-col-name rk-left"><strong>Total Hadir (✅)</strong></td>
+            <td class="rk-sticky rk-col-grade rk-left"><strong>${totalStudents} Siswa</strong></td>
+            ${presentPerSession.map(hadir => {
+                const pct = totalStudents > 0 ? Math.round((hadir / totalStudents) * 100) : 0;
+                return `<td class="rk-center rk-cell-total">
+                    <div class="rk-total-val">${hadir}</div>
+                    <div class="rk-total-pct">${pct}%</div>
+                </td>`;
+            }).join('')}
+        </tr>
+    </tfoot>`;
+
+    table.innerHTML = thead + tbody + tfoot;
 }
 
 // ---------------------------------------------------------------
-// 6. TAB PEMBELAJARAN (evaluasi sikap/fokus per catatan, apa adanya)
+// 6. TAB SILABUS / MATERI TERAJARKAN
 // ---------------------------------------------------------------
-async function loadRekapPembelajaran() {
-    const table = document.getElementById('rk-table-pembelajaran');
-    const ids = getRangePertemuanIds();
-
-    let query = supabase
-        .from('attendance')
-        .select('id, tanggal, status, sikap, fokus, achievement, student:student_id(name, grade), pertemuan:pertemuan_id!inner(tanggal, materi:materi_id(title))')
-        .eq('pertemuan.class_id', app.activeClass.id)
-        .order('tanggal', { ascending: true });
-
-    if (ids) query = query.in('pertemuan_id', ids);
-
-    const { data, error } = await query;
-    if (error) return alert('Gagal memuat data pembelajaran: ' + error.message);
-
-    const rows = (data || []).slice().sort((a, b) =>
-        String(a.student?.name || '').localeCompare(String(b.student?.name || '')) ||
-        (a.tanggal + '').localeCompare(b.tanggal + '')
-    );
-
-    if (!rows.length) {
-        table.innerHTML = `<thead><tr><th>Pembelajaran</th></tr></thead>
-            <tbody><tr><td class="rk-empty">Belum ada data pembelajaran untuk kelas/rentang ini.</td></tr></tbody>`;
-        return;
-    }
-
-    table.innerHTML = `<thead><tr>
-        <th width="40">No</th>
-        <th>Nama Siswa</th>
-        <th>Tanggal</th>
-        <th>Materi</th>
-        <th width="70">Sikap</th>
-        <th width="70">Fokus</th>
-        <th>Keterangan</th>
-    </tr></thead><tbody>` +
-        rows.map((r, i) => `<tr>
-            <td>${i + 1}</td>
-            <td>${escapeHtml(r.student?.name || '-')}${r.student?.grade ? ' <span class="rk-tag">' + escapeHtml(r.student.grade) + '</span>' : ''}</td>
-            <td style="white-space:nowrap;">${escapeHtml(fmtDateLong(r.tanggal))}</td>
-            <td>${escapeHtml(r.pertemuan?.materi?.title || '-')}</td>
-            <td class="rk-center">${escapeHtml(r.sikap ?? '-')}</td>
-            <td class="rk-center">${escapeHtml(r.fokus ?? '-')}</td>
-            <td>${escapeHtml(r.achievement || '-')}</td>
-        </tr>`).join('') + `</tbody>`;
-}
-
-// ---------------------------------------------------------------
-// 7. TAB SILABUS / MATERI TERAJARKAN (satu baris per pertemuan)
-// ---------------------------------------------------------------
-async function loadRekapMateri() {
+function renderMateriTable() {
     const table = document.getElementById('rk-table-materi');
-    const ids = getRangePertemuanIds();
+    const slice = getRangePertemuanList();
 
-    if (!app.pertemuanList.length) {
-        table.innerHTML = `<thead><tr><th>Materi</th></tr></thead>
-            <tbody><tr><td class="rk-empty">Belum ada pertemuan yang tercatat.</td></tr></tbody>`;
-        return;
-    }
-
-    // Jika rentang dipilih, ambil potongan daftar pertemuan
-    let pSlice = app.pertemuanList;
-    if (ids) pSlice = app.pertemuanList.filter(p => ids.includes(p.id));
-
-    if (!pSlice.length) {
+    if (!slice.length) {
         table.innerHTML = `<thead><tr><th>Materi</th></tr></thead>
             <tbody><tr><td class="rk-empty">Belum ada materi yang tercatat dalam rentang ini.</td></tr></tbody>`;
         return;
     }
 
-    const { data: pertemuan, error } = await supabase
-        .from('pertemuan_kelas')
-        .select('id, tanggal, materi_id, materi(title, description, detail)')
-        .in('id', pSlice.map(p => p.id));
-
-    if (error) return alert('Gagal memuat data: ' + error.message);
-
-    const rows = (pertemuan || []).map(p => ({
-        id: p.id,
-        tanggal: p.tanggal,
-        judul: p.materi?.title || '(tanpa judul)',
-        uraian: (p.materi?.description || p.materi?.detail || '').trim()
-    }));
-    rows.sort((a, b) => pSlice.findIndex(x => x.id === a.id) - pSlice.findIndex(x => x.id === b.id));
-
     table.innerHTML = `<thead><tr>
-        <th width="40">No</th>
-        <th style="text-align:left;">Tgl</th>
-        <th style="text-align:left;">Nama Materi</th>
-        <th style="text-align:left;">Uraian singkat</th>
+        <th width="50">Sesi</th>
+        <th class="rk-left" width="140">Tanggal</th>
+        <th class="rk-left" width="220">Nama Materi</th>
+        <th class="rk-left">Uraian / Capaian Pembelajaran</th>
     </tr></thead><tbody>` +
-        rows.map((r, i) => `<tr>
-            <td>${i + 1}</td>
-            <td style="white-space:nowrap;">${escapeHtml(fmtDateLong(r.tanggal))}</td>
-            <td>${escapeHtml(r.judul)}</td>
-            <td>${escapeHtml(r.uraian) || '-'}</td>
+        slice.map((r, i) => `<tr>
+            <td class="rk-center"><strong>${i + 1}</strong></td>
+            <td class="rk-left" style="white-space:nowrap;">${escapeHtml(fmtDateLong(r.tanggal))}</td>
+            <td class="rk-left"><strong>${escapeHtml(r.judul)}</strong></td>
+            <td class="rk-left">${escapeHtml(r.uraian) || '<em style="color:#94a3b8">Tidak ada uraian</em>'}</td>
         </tr>`).join('') + `</tbody>`;
 }
 
 // ---------------------------------------------------------------
-// 8. UTILS & EVENTS
+// 7. UTILS & EVENTS
 // ---------------------------------------------------------------
+function ikonAbsensi(status) {
+    if (status === undefined || status === null) return `<span class="rk-badge-empty">-</span>`;
+    const str = String(status);
+    if (str === '1') return `<span class="rk-badge-hadir" title="Hadir">✅</span>`;
+    if (str === '2') return `<span class="rk-badge-alpa" title="Alpa / Tidak Hadir">❌</span>`;
+    return `<span class="rk-badge-unrated" title="Belum Dinilai">⬜</span>`;
+}
+
 function fmtDate(d) {
     const dt = new Date(d);
     return dt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
@@ -467,7 +522,7 @@ function escapeHtml(v) {
 }
 
 function showSection(id) {
-    ['rk-section-absensi', 'rk-section-pembelajaran', 'rk-section-materi'].forEach(sid => {
+    ['rk-section-absensi', 'rk-section-materi'].forEach(sid => {
         const el = document.getElementById(sid);
         if (el) el.style.display = (sid === id) ? 'block' : 'none';
     });
@@ -485,79 +540,142 @@ function setupEvents() {
         else if (window.loadModule) window.loadModule('gallery-module');
     });
 
-    document.getElementById('rk-year').addEventListener('change', isiDropdownSemester);
-    document.getElementById('rk-semester').addEventListener('change', isiDropdownKelas);
-    document.getElementById('rk-load').addEventListener('click', handleLoadRekap);
+    // Pilih kelas -> langsung muat tanpa tombol manual
+    document.getElementById('rk-class').addEventListener('change', handleLoadRekap);
 
-    document.getElementById('rk-tab-absensi').addEventListener('click', async () => {
+    // Ganti semester
+    document.getElementById('rk-semester').addEventListener('change', async () => {
+        await isiDropdownKelas();
+    });
+
+    // Toggle ganti tahun ajaran jika dibutuhkan
+    const toggleBtn = document.getElementById('rk-toggle-all-years');
+    const selYear = document.getElementById('rk-year');
+    if (toggleBtn && selYear) {
+        toggleBtn.addEventListener('click', () => {
+            const isHidden = selYear.style.display === 'none';
+            selYear.style.display = isHidden ? 'inline-block' : 'none';
+            toggleBtn.textContent = isHidden ? 'Tutup TA' : 'Ubah TA';
+        });
+        selYear.addEventListener('change', async () => {
+            // Muat semester untuk tahun yang dipilih
+            const yid = selYear.value;
+            const { data: semesters } = await supabase
+                .from('semesters')
+                .select('id, name, is_active')
+                .eq('academic_year_id', yid)
+                .order('name');
+            
+            const selSem = document.getElementById('rk-semester');
+            selSem.innerHTML = (semesters || []).map(s =>
+                `<option value="${s.id}" ${s.is_active ? 'selected' : ''}>${escapeHtml(s.name)}${s.is_active ? ' (Aktif)' : ''}</option>`
+            ).join('');
+            
+            await isiDropdownKelas();
+        });
+    }
+
+    // Tab Switcher
+    document.getElementById('rk-tab-absensi').addEventListener('click', () => {
         app.activeTab = 'absensi';
         updateActiveBtn('rk-tab-absensi');
         showSection('rk-section-absensi');
-        await loadRekapAbsensi();
+        renderAbsensiWorksheet();
     });
-    document.getElementById('rk-tab-pembelajaran').addEventListener('click', async () => {
-        app.activeTab = 'pembelajaran';
-        updateActiveBtn('rk-tab-pembelajaran');
-        showSection('rk-section-pembelajaran');
-        await loadRekapPembelajaran();
-    });
-    document.getElementById('rk-tab-materi').addEventListener('click', async () => {
+    
+    document.getElementById('rk-tab-materi').addEventListener('click', () => {
         app.activeTab = 'materi';
         updateActiveBtn('rk-tab-materi');
         showSection('rk-section-materi');
-        await loadRekapMateri();
+        renderMateriTable();
     });
 
-    // Rentang berubah -> muat ulang tab aktif (jika laporan sedang tampil)
-    const reloadActiveTab = async () => {
+    // Rentang filter
+    const reloadActiveTab = () => {
         if (!app.activeClass) return;
-        if (app.activeTab === 'absensi') await loadRekapAbsensi();
-        else if (app.activeTab === 'pembelajaran') await loadRekapPembelajaran();
-        else if (app.activeTab === 'materi') await loadRekapMateri();
+        if (app.activeTab === 'absensi') renderAbsensiWorksheet();
+        else if (app.activeTab === 'materi') renderMateriTable();
     };
     document.getElementById('rk-range-start').addEventListener('change', reloadActiveTab);
     document.getElementById('rk-range-end').addEventListener('change', reloadActiveTab);
 }
 
 // ---------------------------------------------------------------
-// 9. STYLES (scoped rk- agar tidak bertabrakan dengan modul lain)
+// 8. STYLES
 // ---------------------------------------------------------------
 function injectStyles() {
     if (document.getElementById('rk-css')) return;
     const s = document.createElement('style');
     s.id = 'rk-css';
     s.textContent = `
-        .rk-container { max-width: 1000px; margin: 0 auto; padding: 12px; font-family: inherit; color: #1e293b; }
-        .rk-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
-        .rk-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
-        .rk-top h2 { margin: 0; font-size: 1.15rem; color: #0f172a; }
-        .rk-btn { border: none; border-radius: 10px; padding: 8px 16px; font-size: .8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .rk-container { max-width: 1050px; margin: 0 auto; padding: 12px; font-family: inherit; color: #1e293b; }
+        .rk-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.03); }
+        .rk-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+        .rk-title-area { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .rk-top h2 { margin: 0; font-size: 1.25rem; color: #0f172a; font-weight: 800; }
+        .rk-active-term-badge { background: #e0f2fe; color: #0284c7; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+        .rk-btn { border: none; border-radius: 10px; padding: 8px 16px; font-size: .8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; }
         .rk-btn-ghost { background: #f1f5f9; color: #334155; }
         .rk-btn-ghost:hover { background: #e2e8f0; }
-        .rk-btn-primary { background: #2ecc71; color: #fff; box-shadow: 0 4px 10px rgba(46,204,113,.3); padding: 9px 16px; }
-        .rk-btn-primary:hover { background: #27ae60; }
-        .rk-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; align-items: end; }
-        .rk-field label { display: block; font-size: .72rem; font-weight: 700; color: #475569; margin-bottom: 3px; }
-        .rk-input { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: .82rem; background: #fff; outline: none; }
-        .rk-meta { font-size: .85rem; color: #555; margin-top: 4px; }
-        .rk-meta-bold { font-weight: 700; color: #334155; }
+        .rk-btn-link { background: none; border: none; color: #3b82f6; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0 4px; }
+        
+        .rk-filter-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+        .rk-field-class { flex: 2; min-width: 240px; }
+        .rk-field-period-toggle { flex: 1; min-width: 200px; }
+        .rk-field label { display: block; font-size: .75rem; font-weight: 700; color: #475569; margin-bottom: 5px; }
+        .rk-input { width: 100%; padding: 10px 12px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: .85rem; background: #fff; outline: none; transition: border-color .15s; }
+        .rk-input:focus { border-color: #2ecc71; box-shadow: 0 0 0 3px rgba(46,204,113,.15); }
+        .rk-period-box { display: flex; align-items: center; gap: 6px; }
+        .rk-input-period { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: .78rem; background: #f8fafc; outline: none; }
+        
+        .rk-header-main { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
+        .rk-school-title { font-family: 'Fredoka One', cursive; color: #3b82f6; margin: 0 0 4px 0; font-size: 1.25rem; }
+        .rk-meta { font-size: .9rem; font-weight: 700; color: #1e293b; }
+        .rk-meta-sub { font-size: .78rem; color: #64748b; margin-top: 2px; }
+        .rk-stats-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+        .rk-stat-pill { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 14px; text-align: center; }
+        .rk-stat-highlight { background: #ecfdf5; border-color: #a7f3d0; }
+        .rk-stat-num { display: block; font-size: 1.05rem; font-weight: 800; color: #0f172a; }
+        .rk-stat-highlight .rk-stat-num { color: #059669; }
+        .rk-stat-lbl { font-size: .65rem; color: #64748b; font-weight: 700; text-transform: uppercase; }
+
         .rk-control { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
-        .rk-tabs { display: flex; gap: 10px; flex-wrap: wrap; }
-        .rk-tab { padding: 7px 14px; font-size: .8rem; font-weight: 700; color: #94a3b8; background: none; border: none; border-radius: 8px; cursor: pointer; }
-        .rk-tab.active { color: #fff; background: #2ecc71; box-shadow: 0 3px 8px rgba(46,204,113,.35); }
+        .rk-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+        .rk-tab { padding: 8px 16px; font-size: .82rem; font-weight: 700; color: #64748b; background: #f1f5f9; border: none; border-radius: 999px; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+        .rk-tab.active { color: #fff; background: #2ecc71; box-shadow: 0 3px 10px rgba(46,204,113,.35); }
         .rk-range { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .78rem; color: #475569; }
-        .rk-input-mini { padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: .78rem; max-width: 220px; background: #fff; }
-        .rk-section { overflow-x: auto; }
-        .rk-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; font-size: .8rem; }
-        .rk-table th, .rk-table td { border: 1px solid #e2e8f0; padding: 7px 9px; text-align: center; }
-        .rk-table th { background: #f8fafc; color: #334155; font-weight: 700; }
-        .rk-table td { text-align: left; }
+        .rk-input-mini { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: .78rem; max-width: 200px; background: #fff; }
+        
+        .rk-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid #e2e8f0; }
+        .rk-table { width: 100%; min-width: 680px; border-collapse: separate; border-spacing: 0; background: #fff; font-size: .82rem; }
+        .rk-table th, .rk-table td { border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; padding: 8px 10px; text-align: center; }
+        .rk-table th { background: #f8fafc; color: #334155; font-weight: 700; border-top: none; }
+        .rk-session-header { min-width: 90px; }
+        .rk-session-num { display: block; font-size: 0.72rem; color: #3b82f6; font-weight: 800; }
+        .rk-session-date { display: block; font-size: 0.7rem; color: #64748b; font-weight: normal; margin-top: 1px; }
+        
+        /* Sticky columns */
+        .rk-table th.rk-sticky, .rk-table td.rk-sticky { position: sticky; background: #fff; z-index: 2; }
+        .rk-table th.rk-sticky { background: #f8fafc; z-index: 3; }
+        .rk-col-no { left: 0; width: 40px; min-width: 40px; }
+        .rk-col-name { left: 40px; min-width: 140px; max-width: 200px; }
+        .rk-col-grade { left: 180px; min-width: 65px; border-right: 2px solid #cbd5e1 !important; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.06); }
+        
+        .rk-table td.rk-left, .rk-table th.rk-left { text-align: left; }
         .rk-table td.rk-center { text-align: center; }
-        .rk-tag { display: inline-block; background: #eef2ff; color: #4f46e5; font-size: .68rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 4px; }
-        .rk-empty { padding: 24px; text-align: center; color: #94a3b8; }
+        .rk-empty { padding: 32px; text-align: center; color: #94a3b8; }
+        
+        /* Footer Total Styling */
+        .rk-foot-total td { background: #f0fdf4 !important; font-weight: 700; border-top: 2px solid #86efac; border-bottom: none; }
+        .rk-foot-total td.rk-sticky { background: #dcfce7 !important; z-index: 2; }
+        .rk-cell-total { padding: 6px !important; }
+        .rk-total-val { font-size: 0.95rem; font-weight: 800; color: #15803d; }
+        .rk-total-pct { font-size: 0.68rem; color: #166534; font-weight: 600; }
+
         @media (max-width: 720px) {
             .rk-control { flex-direction: column; align-items: stretch; }
             .rk-range { justify-content: flex-start; }
+            .rk-filter-row { flex-direction: column; align-items: stretch; }
         }
     `;
     document.head.appendChild(s);

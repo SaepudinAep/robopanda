@@ -36,6 +36,10 @@ let activeTab = 'media';
 let rawGalleryData = []; 
 let rekapContainer = null;  // referensi container untuk modul Rekap Absensi 
 
+// [SEMESTER] Dropdown semester terdaftar: daftar kelas wajib mengikuti semester terpilih.
+let gallerySemesters = [];     // cache semester dari tabel semesters {id, name, is_active}
+let activeSemesterId = null;   // semester terpilih pada filter Gallery
+
 // --- 2. INITIALIZATION ---
 export async function init(container, profileFromIndex) {
     userProfile = profileFromIndex || { role: 'guest' };
@@ -101,12 +105,15 @@ async function loadClassesOrGroups() {
     }
 
     wrapper.style.display = 'block';
+    await ensureSemesterFilterVisible(); // [SEMESTER] dropdown semester siap (default: semester aktif) sebelum kelas diisi
     classSelect.innerHTML = '<option disabled selected>Memuat...</option>';
 
     const table = currentContext === 'school' ? 'classes' : 'class_private';
     const selectStr = currentContext === 'school' ? 'id, name, schools(name)' : 'id, name, group_id';
     
     let query = supabase.from(table).select(selectStr);
+    // [SEMESTER] kelas disaring mengikuti semester terpilih (hanya tabel classes yang terikat semester)
+    if (currentContext === 'school' && activeSemesterId) query = query.eq('semester_id', activeSemesterId);
     if (userProfile.role === 'pic') {
         const col = currentContext === 'school' ? 'school_id' : 'group_id';
         const val = currentContext === 'school' ? userProfile.school_id : userProfile.group_id;
@@ -120,21 +127,89 @@ async function loadClassesOrGroups() {
     }
 }
 
+// --- 4a. FILTER SEMESTER TERDAFTAR (semester aktif selalu urut paling atas) ---
+async function loadSemesterOptions() {
+    const { data, error } = await supabase.from('semesters').select('id, name, is_active');
+    if (error || !data) {
+        console.warn('[Gallery] Gagal memuat semester:', error?.message || 'tidak ada data');
+        gallerySemesters = [];
+        renderSemesterOptions();
+        return;
+    }
+    gallerySemesters = data;
+    // [UX] Default: langsung pilih semester aktif agar user tidak perlu memilih ulang
+    if (!activeSemesterId) {
+        const aktif = gallerySemesters.find(s => s.is_active === true);
+        if (aktif) activeSemesterId = aktif.id;
+    }
+    renderSemesterOptions();
+}
+
+function renderSemesterOptions() {
+    const semSelect = document.getElementById('semester-select');
+    if (!semSelect) return;
+    if (!gallerySemesters.length) {
+        semSelect.innerHTML = '<option value="" disabled selected>-- Semester tidak tersedia --</option>';
+        return;
+    }
+    // [UX] Semester aktif urut PALING ATAS semua, sisanya urut nama (Semester 1 -> Semester 2)
+    const sorted = [...gallerySemesters].sort((a, b) =>
+        (b.is_active === true) - (a.is_active === true) ||
+        String(a.name).localeCompare(String(b.name))
+    );
+    semSelect.innerHTML = '<option value="" disabled ' + (activeSemesterId ? '' : 'selected') + '>-- Pilih Semester --</option>' +
+        sorted.map(s => `<option value="${s.id}" ${s.id === activeSemesterId ? 'selected' : ''}>${s.name}${s.is_active ? ' (Aktif)' : ''}</option>`).join('');
+}
+
+async function ensureSemesterFilterVisible() {
+    const semWrapper = document.getElementById('semester-filter-wrapper');
+    if (!semWrapper) return;
+    if (currentContext !== 'school') { semWrapper.style.display = 'none'; return; } // kelas privat tidak terikat semester
+    semWrapper.style.display = 'block';
+    if (!gallerySemesters.length) await loadSemesterOptions();
+    else renderSemesterOptions();
+}
+
+window.handleSemesterChange = (id) => {
+    activeSemesterId = id || null;
+    renderSemesterOptions();
+    if (userProfile.role !== 'student') loadClassesOrGroups(); // isi ulang daftar kelas sesuai semester terpilih
+};
+
 async function loadSessions() {
     const sessionSelect = document.getElementById('session-select');
+    if (!sessionSelect) return;
     const isSchool = currentContext === 'school';
     const table = isSchool ? 'pertemuan_kelas' : 'pertemuan_private';
-    const selectStr = isSchool ? 'id, tanggal, materi(title)' : 'id, tanggal, pertemuan_ke, materi_private(judul)';
+    const selectStr = isSchool ? 'id, tanggal, materi_id, materi:materi_id(title)' : 'id, tanggal, pertemuan_ke, materi_id, materi_private:materi_id(judul)';
 
     const { data } = await supabase.from(table).select(selectStr).eq('class_id', activeClassId).order('tanggal', { ascending: false });
     
-    if (data) {
-        sessionSelect.innerHTML = '<option value="" disabled selected>-- Pilih Topik --</option>' + 
+    if (data && data.length > 0) {
+        sessionSelect.innerHTML = '<option value="" disabled>-- Pilih Topik --</option>' + 
             data.map(s => {
                 const date = new Date(s.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
                 const title = isSchool ? (s.materi?.title || 'Kegiatan') : (s.materi_private?.judul || `Sesi ${s.pertemuan_ke}`);
-                return `<option value="${s.id}">${date} : ${title}</option>`;
+                return `<option value="${s.id}" data-materi-id="${s.materi_id || ''}" data-date="${s.tanggal}">${date} : ${title}</option>`;
             }).join('');
+        
+        // Auto-pilih sesi terbaru agar tidak perlu klik 2x
+        sessionSelect.selectedIndex = 1;
+        window.handleSessionChange(sessionSelect.value);
+    } else {
+        sessionSelect.innerHTML = '<option value="" disabled selected>Belum ada sesi</option>';
+        const tabs = document.getElementById('content-tabs');
+        if (tabs) tabs.style.display = 'none';
+        const grid = document.getElementById('ug-grid');
+        if (grid) {
+            grid.innerHTML = `
+                <div class="empty-state">
+                    <div class="ug-empty-emoji" aria-hidden="true">📭</div>
+                    <p>Belum ada dokumentasi sesi untuk kelas ini.</p>
+                </div>`;
+        }
+        const dlBtn = document.getElementById('btn-download-all');
+        if (dlBtn) dlBtn.style.display = 'none';
     }
 }
 
@@ -475,6 +550,7 @@ window.openRekapModule = async () => {
         const mod = await import(`./rekap-absensi-module.js?v=${Date.now()}`);
         await mod.init(rekapContainer, {
             userProfile,
+            initialClassId: activeClassId, // [INTEGRASI] Teruskan kelas aktif agar langsung terbuka
             onBack: () => {
                 // Kembali: render ulang layout gallery seperti semula
                 if (rekapContainer) init(rekapContainer, userProfile);
@@ -486,6 +562,19 @@ window.openRekapModule = async () => {
             <div style="padding:50px; text-align:center; color:#ef4444;">
                 Modul Rekap Absensi gagal dimuat.
             </div>`;
+    }
+};
+
+window.openExplorerForCurrentSession = () => {
+    const sessionSelect = document.getElementById('session-select');
+    if (!sessionSelect || sessionSelect.selectedIndex < 0) return;
+    const opt = sessionSelect.selectedOptions[0];
+    const materiId = opt?.dataset?.materiId;
+    const date = opt?.dataset?.date;
+    if (materiId && window.openModalExplorer) {
+        window.openModalExplorer(materiId, date, currentContext === 'school' ? 'sekolah' : 'private');
+    } else {
+        alert("Detail misi untuk sesi ini belum tersedia di kurikulum.");
     }
 };
 
@@ -505,13 +594,22 @@ function renderLayout(container) {
             ${privilegedRoles.includes(role) ? `
             <div class="ug-rekap-row">
                 <button id="btn-open-rekap" class="btn-rekap" onclick="window.openRekapModule()">
-                    <i class="fa-solid fa-clipboard-list"></i> Rekap Absensi Sekolah
+                    <i class="fa-solid fa-clipboard-list"></i> Rekap Absensi Kelas Ini
                 </button>
             </div>` : ''}
             
             <div class="ug-filters">
+                <div class="filter-group" id="semester-filter-wrapper" style="display:none;"><label>Semester</label><select id="semester-select" onchange="window.handleSemesterChange(this.value)"></select></div>
                 <div class="filter-group" id="class-filter-wrapper" style="display:none;"><label>Kelas</label><select id="class-select" onchange="window.handleClassChange(this.value)"></select></div>
-                <div class="filter-group"><label>Materi</label><select id="session-select" onchange="window.handleSessionChange(this.value)"></select></div>
+                <div class="filter-group">
+                    <label>Materi / Sesi</label>
+                    <div style="display:flex; gap:5px;">
+                        <select id="session-select" style="flex:1;" onchange="window.handleSessionChange(this.value)"></select>
+                        <button id="btn-view-materi-info" onclick="window.openExplorerForCurrentSession()" title="Lihat Detail Misi Explorer" style="padding:6px 10px; border:1px solid #cbd5e1; border-radius:5px; background:#f8fafc; cursor:pointer; font-size:0.8rem; color:#3b82f6;">
+                            <i class="fa-solid fa-circle-info"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div id="bulk-action-area" style="margin-bottom:15px; text-align:right;">

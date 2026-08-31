@@ -70,6 +70,11 @@ export async function initExplorer(container) {
                 <div class="modal-body">
                     <div class="content-block"><h3>Ringkasan Misi</h3><p id="modal-description"></p></div>
                     <div class="content-block"><h3>Rencana Pembelajaran</h3><div id="modal-detail" class="detail-text"></div></div>
+                    <div style="margin-top: 20px; text-align: center;">
+                        <button id="btn-modal-to-gallery" class="btn-login-trigger" style="background:#2ecc71; padding: 10px 22px; font-size: 0.85rem; cursor:pointer; border:none; border-radius:999px; color:#fff; font-weight:700;" onclick="const m=document.getElementById('modal-explorer');if(m)m.classList.remove('active');document.body.style.overflow='';if(window.loadModule){window.loadModule('gallery-module');}">
+                            <i class="fa-solid fa-camera"></i> Lihat Galeri Hasil Karya
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
