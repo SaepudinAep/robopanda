@@ -1,26 +1,427 @@
-id,title,route,category,allowed_roles,allowed_level_ids,icon_class,order_index,is_active,created_at
-0199a870-aefa-445a-a1e8-90a20effb908,Overview,overview,6c30fd18-bdcb-4646-9bb2-56730243db49,"[""super_admin"",""teacher""]",,fa-solid fa-star,1,true,2026-02-04 12:53:28.471342+00
-10fc0c48-e5e8-4531-b298-ebd9c216c095,Home,explorer-module,ce7193ab-6bc5-46a5-bc03-157c2ae97dea,"[""guest""]",[],fa-solid fa-house,1,true,2026-02-04 01:49:38.015339+00
-1ad6f7bf-1a92-4f88-b016-a39f9b792ce5,User Management,user-management.html,5023f4eb-13dd-49e7-9a85-498c9026972a,"[""super_admin"",""teacher""]",,fa-solid fa-users-gear,99,true,2026-02-03 11:43:22.383861+00
-2a8e00c6-0d75-4690-8560-738db882d351,User Management,user-management,6c30fd18-bdcb-4646-9bb2-56730243db49,"[""super_admin"",""teacher""]",,fa-solid fa-power-off,9,true,2026-02-04 16:33:32.133979+00
-2d9c3e9a-dac2-470f-b521-384e1b5093b6,Billing Summary,billing,6c30fd18-bdcb-4646-9bb2-56730243db49,"[""super_admin"",""teacher""]",[],fa-solid fa-chart-line,5,true,2026-08-26 01:21:15.240342+00
-41dc52cc-0124-41c0-9ce0-794c9db5973b,Gallery Private,galeri-private,d66ca10d-cd9a-497f-8fd0-da34d1c8f71c,"[""super_admin"",""teacher""]",,fa-solid fa-video,2,true,2026-02-06 19:28:56.908311+00
-42a506e3-9360-4b73-b7fa-2f01b05e9dec,Menu Manager (Old),menu-manager.html,5023f4eb-13dd-49e7-9a85-498c9026972a,"[""super_admin""]",,fa-solid fa-list-check,100,true,2026-02-04 15:48:00.82869+00
-5d6c5dbb-2617-4169-a3c3-de966aeb3eca,Materi Private + Level,materi-private,d66ca10d-cd9a-497f-8fd0-da34d1c8f71c,"[""super_admin"",""teacher""]","[""b3bc832e-c2dd-4c38-b755-9f07419b294f"",""54837684-0267-483d-9a92-45863933423e""]",fa-solid fa-medal,3,true,2026-02-04 17:36:33.833326+00
-62505593-487a-47c6-bf39-264aef5b1f4c,Registrasi Sekolah,registrasi_sekolah2.html,7bf5f0e9-e699-4dcb-a26e-1636b34e9414,"[""super_admin"",""teacher""]","[""de8faae5-3a23-42a3-bfd7-1ce6da42190e"",""37f69f2f-7e17-46dd-94c0-5c2082a25eb7"",""b3bc832e-c2dd-4c38-b755-9f07419b294f""]",fa-solid fa-user-plus,4,true,2026-02-03 11:43:22.383861+00
-677a7cb6-6dc4-4654-acbb-2dbfe1076d02,Gallery,galeri-sekolah,86b447db-305a-4d95-81b6-e00443264053,"[""super_admin"",""teacher""]","[""de8faae5-3a23-42a3-bfd7-1ce6da42190e"",""37f69f2f-7e17-46dd-94c0-5c2082a25eb7"",""b3bc832e-c2dd-4c38-b755-9f07419b294f""]",fa-solid fa-images,2,true,2026-02-06 12:17:30.769775+00
-6d9cbce5-0b85-4874-82aa-954f9d4f8610,Cloudinary,cloudinary-manager,6c30fd18-bdcb-4646-9bb2-56730243db49,"[""super_admin""]",[],fa-solid fa-key,3,true,2026-02-06 03:00:49.70791+00
-7dd7ffec-e960-4711-86fc-4b306f75ddff,Absensi,absensi-private,d66ca10d-cd9a-497f-8fd0-da34d1c8f71c,"[""super_admin"",""teacher""]","[""b3bc832e-c2dd-4c38-b755-9f07419b294f"",""54837684-0267-483d-9a92-45863933423e""]",fa-solid fa-robot,1,true,2026-02-05 02:00:51.17557+00
-867ceb84-0091-405a-9aad-f7eee721e7e8,Absensi Sekolah,absensi_sekolah.html,7bf5f0e9-e699-4dcb-a26e-1636b34e9414,"[""super_admin"",""teacher""]","[""de8faae5-3a23-42a3-bfd7-1ce6da42190e"",""37f69f2f-7e17-46dd-94c0-5c2082a25eb7"",""b3bc832e-c2dd-4c38-b755-9f07419b294f""]",fa-solid fa-calendar-check,1,true,2026-02-03 11:43:22.383861+00
-99bbdbb2-f8d7-4c9a-9b06-42812ea62abb,Absensi Private,absensi_private.html,99473e80-8975-48f1-b618-29f95bec6edb,"[""super_admin"",""teacher""]","[""b3bc832e-c2dd-4c38-b755-9f07419b294f"",""54837684-0267-483d-9a92-45863933423e""]",fa-solid fa-clipboard-user,4,true,2026-02-03 11:43:22.383861+00
-9c0d9353-7ae7-49dd-8162-4acb6bcf469e,Materi Private,materi_private.html,99473e80-8975-48f1-b618-29f95bec6edb,"[""super_admin"",""teacher""]","[""b3bc832e-c2dd-4c38-b755-9f07419b294f"",""54837684-0267-483d-9a92-45863933423e""]",fa-solid fa-laptop-code,5,true,2026-02-03 11:43:22.383861+00
-a52b1156-b957-4cc2-ab6b-c0334ff80c75,Registrasi Sekolah,registrasi-sekolah,86b447db-305a-4d95-81b6-e00443264053,"[""super_admin"",""teacher""]","[""de8faae5-3a23-42a3-bfd7-1ce6da42190e"",""37f69f2f-7e17-46dd-94c0-5c2082a25eb7"",""b3bc832e-c2dd-4c38-b755-9f07419b294f""]",fa-solid fa-school,4,true,2026-02-04 17:21:03.999414+00
-a86c6285-1ca6-4ca8-b429-0515b5693372,Absensi,absensi-sekolah,86b447db-305a-4d95-81b6-e00443264053,"[""super_admin"",""teacher""]","[""de8faae5-3a23-42a3-bfd7-1ce6da42190e"",""37f69f2f-7e17-46dd-94c0-5c2082a25eb7"",""b3bc832e-c2dd-4c38-b755-9f07419b294f""]",fa-solid fa-robot,1,true,2026-02-04 18:02:33.491538+00
-aa035648-f0c4-418a-b293-bdee8d10611b,Menu Manager,menu-manager,6c30fd18-bdcb-4646-9bb2-56730243db49,"[""super_admin""]",,fa-solid fa-user-shield,10,true,2026-02-04 14:15:27.009926+00
-b7ca39e3-0836-45bf-a807-c26c3292bb71,Silabus,silabus.js,86b447db-305a-4d95-81b6-e00443264053,"[""super_admin"",""teacher""]",[],fa-solid fa-school,4,true,2026-08-24 16:32:23.777028+00
-b8a4ece6-a305-422f-99a6-175b45c969e1,Registrasi Private,registrasi-private,d66ca10d-cd9a-497f-8fd0-da34d1c8f71c,"[""super_admin"",""teacher""]","[""b3bc832e-c2dd-4c38-b755-9f07419b294f"",""54837684-0267-483d-9a92-45863933423e""]",fa-solid fa-users,4,true,2026-02-04 17:32:23.294928+00
-baa9696f-0ef8-4e75-b24b-644bdad1ae89,Materi Sekolah,guru-materi,86b447db-305a-4d95-81b6-e00443264053,"[""super_admin"",""teacher""]","[""de8faae5-3a23-42a3-bfd7-1ce6da42190e"",""37f69f2f-7e17-46dd-94c0-5c2082a25eb7"",""b3bc832e-c2dd-4c38-b755-9f07419b294f""]",fa-solid fa-calendar-days,3,true,2026-02-04 17:15:43.571958+00
-cbba1396-40bc-4755-9220-efe0ee0fb216,Tools,tools,ce7193ab-6bc5-46a5-bc03-157c2ae97dea,"[""guest""]",[],fa-solid fa-gamepad,3,true,2026-02-06 00:57:39.860055+00
-cf6d68a2-07da-4224-8a75-0c70f7609bfa,Materi & Achievement,guru_materi.html,7bf5f0e9-e699-4dcb-a26e-1636b34e9414,"[""super_admin"",""teacher""]","[""de8faae5-3a23-42a3-bfd7-1ce6da42190e"",""37f69f2f-7e17-46dd-94c0-5c2082a25eb7"",""b3bc832e-c2dd-4c38-b755-9f07419b294f""]",fa-solid fa-book-open,2,true,2026-02-03 11:43:22.383861+00
-d26065a8-7002-438a-996a-0836c2c1f0e6,Registrasi Private,registrasi_private.html,99473e80-8975-48f1-b618-29f95bec6edb,"[""super_admin"",""teacher""]","[""b3bc832e-c2dd-4c38-b755-9f07419b294f"",""54837684-0267-483d-9a92-45863933423e""]",fa-solid fa-user-graduate,6,true,2026-02-03 11:43:22.383861+00
-ec24d05a-78c0-4da2-a09f-87efd4f9f3be,Galeri,gallery-module,ce7193ab-6bc5-46a5-bc03-157c2ae97dea,"[""super_admin"",""pic"",""teacher"",""student""]",[],fa-solid fa-camera,2,true,2026-02-04 01:50:03.546616+00
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.schools (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  address text,
+  headmaster text,
+  npsn text,
+  phone text,
+  email text,
+  logo_url text,
+  is_active boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  user_id uuid,
+  CONSTRAINT schools_pkey PRIMARY KEY (id),
+  CONSTRAINT schools_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.academic_years (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  school_id uuid,
+  year text NOT NULL,
+  is_active boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT academic_years_pkey PRIMARY KEY (id),
+  CONSTRAINT academic_years_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id)
+);
+CREATE TABLE public.semesters (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  academic_year_id uuid,
+  name text NOT NULL CHECK (name = ANY (ARRAY['Semester 1'::text, 'Semester 2'::text])),
+  is_active boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT semesters_pkey PRIMARY KEY (id),
+  CONSTRAINT semesters_academic_year_id_fkey FOREIGN KEY (academic_year_id) REFERENCES public.academic_years(id)
+);
+CREATE TABLE public.classes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  school_id uuid,
+  academic_year_id uuid,
+  semester text CHECK (semester = ANY (ARRAY['Semester 1'::text, 'Semester 2'::text])),
+  level text CHECK (level = ANY (ARRAY['Kiddy'::text, 'Beginner'::text])),
+  jadwal text,
+  created_at timestamp with time zone DEFAULT now(),
+  semester_id uuid,
+  sub_level_id uuid,
+  CONSTRAINT classes_pkey PRIMARY KEY (id),
+  CONSTRAINT classes_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT classes_academic_year_id_fkey FOREIGN KEY (academic_year_id) REFERENCES public.academic_years(id),
+  CONSTRAINT fk_classes_semester FOREIGN KEY (semester_id) REFERENCES public.semesters(id),
+  CONSTRAINT classes_sub_level_id_fkey FOREIGN KEY (sub_level_id) REFERENCES public.sub_levels(id)
+);
+CREATE TABLE public.students (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  class_id uuid,
+  user_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  school_id uuid,
+  grade text,
+  is_active boolean DEFAULT true,
+  CONSTRAINT students_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_students_class_id FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT fk_students_school_id FOREIGN KEY (school_id) REFERENCES public.schools(id)
+);
+CREATE TABLE public.teachers (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  role text CHECK (role = ANY (ARRAY['guru'::text, 'asisten'::text])),
+  CONSTRAINT teachers_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.materi (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  class_id uuid,
+  guru_id uuid,
+  asisten_id uuid,
+  date date,
+  description text,
+  detail text,
+  level text,
+  created_at timestamp with time zone DEFAULT now(),
+  level_id uuid,
+  image_url text,
+  sub_level_id uuid,
+  order_index integer,
+  CONSTRAINT materi_pkey PRIMARY KEY (id),
+  CONSTRAINT materi_guru_id_fkey FOREIGN KEY (guru_id) REFERENCES public.teachers(id),
+  CONSTRAINT fk_materi_level FOREIGN KEY (level_id) REFERENCES public.levels(id),
+  CONSTRAINT materi_sub_level_id_fkey FOREIGN KEY (sub_level_id) REFERENCES public.sub_levels(id)
+);
+CREATE TABLE public.attendance (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid,
+  status text,
+  created_at timestamp with time zone DEFAULT now(),
+  pertemuan_id uuid,
+  sikap text,
+  achievement text,
+  tanggal date,
+  fokus text,
+  CONSTRAINT attendance_pkey PRIMARY KEY (id),
+  CONSTRAINT attendance_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT fk_pertemuan FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_kelas(id)
+);
+CREATE TABLE public.levels (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  kode text NOT NULL UNIQUE,
+  detail text,
+  order_index integer,
+  CONSTRAINT levels_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.pertemuan_kelas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  school_id uuid,
+  materi_id uuid,
+  guru_id uuid,
+  asisten_id uuid,
+  class_id uuid,
+  tanggal date NOT NULL,
+  CONSTRAINT pertemuan_kelas_pkey PRIMARY KEY (id),
+  CONSTRAINT pertemuan_kelas_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT pertemuan_kelas_materi_id_fkey FOREIGN KEY (materi_id) REFERENCES public.materi(id),
+  CONSTRAINT pertemuan_kelas_guru_id_fkey FOREIGN KEY (guru_id) REFERENCES public.teachers(id),
+  CONSTRAINT pertemuan_kelas_asisten_id_fkey FOREIGN KEY (asisten_id) REFERENCES public.teachers(id),
+  CONSTRAINT pertemuan_kelas_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+);
+CREATE TABLE public.group_private (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  code text,
+  owner text,
+  address text,
+  created_at timestamp with time zone,
+  CONSTRAINT group_private_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.materi_private (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  judul text,
+  deskripsi text,
+  detail text,
+  level text,
+  created_at timestamp with time zone DEFAULT now(),
+  level_id uuid,
+  image_url text,
+  sub_level_id uuid,
+  order_index integer,
+  CONSTRAINT materi_private_pkey PRIMARY KEY (id),
+  CONSTRAINT materi_private_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.levels(id),
+  CONSTRAINT materi_private_sub_level_id_fkey FOREIGN KEY (sub_level_id) REFERENCES public.sub_levels(id)
+);
+CREATE TABLE public.achievement_private (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  main_achievement text,
+  level text,
+  catatan text,
+  created_at timestamp with time zone,
+  level_id uuid,
+  sub_achievement text,
+  materi_id uuid,
+  sub_level_id uuid,
+  CONSTRAINT achievement_private_pkey PRIMARY KEY (id),
+  CONSTRAINT achievement_private_materi_id_fkey FOREIGN KEY (materi_id) REFERENCES public.materi_private(id),
+  CONSTRAINT achievement_private_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.levels(id),
+  CONSTRAINT achievement_private_sub_level_id_fkey FOREIGN KEY (sub_level_id) REFERENCES public.sub_levels(id)
+);
+CREATE TABLE public.class_private (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  group_id uuid,
+  name text,
+  level text,
+  created_at timestamp with time zone,
+  level_id uuid,
+  is_active boolean NOT NULL DEFAULT true,
+  sub_level_id uuid,
+  CONSTRAINT class_private_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_class_level FOREIGN KEY (level_id) REFERENCES public.levels(id),
+  CONSTRAINT class_private_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.group_private(id),
+  CONSTRAINT class_private_sub_level_id_fkey FOREIGN KEY (sub_level_id) REFERENCES public.sub_levels(id)
+);
+CREATE TABLE public.students_private (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  class_id uuid,
+  name text,
+  created_at timestamp with time zone,
+  is_active boolean NOT NULL DEFAULT true,
+  CONSTRAINT students_private_pkey PRIMARY KEY (id),
+  CONSTRAINT students_private_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.class_private(id)
+);
+CREATE TABLE public.pertemuan_private (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  class_id uuid,
+  pertemuan_ke integer,
+  tanggal date,
+  materi_id uuid,
+  teacher_id uuid,
+  created_at timestamp with time zone,
+  jumlah_sesi integer NOT NULL DEFAULT 1 CHECK (jumlah_sesi >= 1),
+  CONSTRAINT pertemuan_private_pkey PRIMARY KEY (id),
+  CONSTRAINT pertemuan_private_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.class_private(id),
+  CONSTRAINT pertemuan_private_materi_id_fkey FOREIGN KEY (materi_id) REFERENCES public.materi_private(id),
+  CONSTRAINT pertemuan_private_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teachers(id)
+);
+CREATE TABLE public.achievement_target (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pertemuan_id uuid,
+  achievement_id uuid,
+  catatan text,
+  created_at timestamp with time zone,
+  CONSTRAINT achievement_target_pkey PRIMARY KEY (id),
+  CONSTRAINT achievement_target_pertemuan_id_fkey FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_private(id),
+  CONSTRAINT achievement_target_achievement_id_fkey FOREIGN KEY (achievement_id) REFERENCES public.achievement_private(id)
+);
+CREATE TABLE public.achievement_pertemuan (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pertemuan_id uuid,
+  student_id uuid,
+  achievement_id uuid,
+  indikator integer,
+  catatan text,
+  created_at timestamp with time zone,
+  CONSTRAINT achievement_pertemuan_pkey PRIMARY KEY (id),
+  CONSTRAINT achievement_pertemuan_achievement_id_fkey FOREIGN KEY (achievement_id) REFERENCES public.achievement_private(id),
+  CONSTRAINT achievement_pertemuan_pertemuan_id_fkey FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_private(id),
+  CONSTRAINT achievement_pertemuan_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students_private(id)
+);
+CREATE TABLE public.attendance_private (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pertemuan_id uuid NOT NULL,
+  student_id uuid NOT NULL,
+  materi_id uuid,
+  sikap integer,
+  fokus integer,
+  pemahaman integer,
+  detail text,
+  catatan text,
+  CONSTRAINT attendance_private_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_pertemuan FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_private(id),
+  CONSTRAINT fk_student FOREIGN KEY (student_id) REFERENCES public.students_private(id),
+  CONSTRAINT attendance_private_pertemuan_id_fkey FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_private(id),
+  CONSTRAINT attendance_private_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students_private(id),
+  CONSTRAINT attendance_private_materi_id_fkey FOREIGN KEY (materi_id) REFERENCES public.materi_private(id)
+);
+CREATE TABLE public.achievement_sekolah (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  main_achievement text NOT NULL,
+  sub_achievement text NOT NULL,
+  level_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  sub_level_id uuid,
+  CONSTRAINT achievement_sekolah_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_ach_sekolah_level FOREIGN KEY (level_id) REFERENCES public.levels(id),
+  CONSTRAINT achievement_sekolah_sub_level_id_fkey FOREIGN KEY (sub_level_id) REFERENCES public.sub_levels(id)
+);
+CREATE TABLE public.achievement_kelas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pertemuan_id uuid NOT NULL,
+  class_id uuid NOT NULL,
+  achievement_sekolah_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT achievement_kelas_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_pertemuan_kelas FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_kelas(id),
+  CONSTRAINT fk_class_target FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT fk_ach_sekolah FOREIGN KEY (achievement_sekolah_id) REFERENCES public.achievement_sekolah(id)
+);
+CREATE TABLE public.achievement_siswa (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pertemuan_id uuid NOT NULL,
+  class_id uuid NOT NULL,
+  achievement_kelas_id uuid NOT NULL,
+  student_id uuid NOT NULL,
+  score integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT achievement_siswa_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_pertemuan_shortcut FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_kelas(id),
+  CONSTRAINT fk_kelas_shortcut FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT fk_target_sesi FOREIGN KEY (achievement_kelas_id) REFERENCES public.achievement_kelas(id),
+  CONSTRAINT fk_student_sekolah FOREIGN KEY (student_id) REFERENCES public.students(id)
+);
+CREATE TABLE public.user_profiles (
+  id uuid NOT NULL,
+  role text DEFAULT 'student'::user_role,
+  is_active boolean DEFAULT true,
+  level_id uuid,
+  school_id uuid,
+  class_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  email text,
+  group_id uuid,
+  class_private_id uuid,
+  name text,
+  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT user_profiles_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.levels(id),
+  CONSTRAINT user_profiles_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT user_profiles_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT user_profiles_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.group_private(id),
+  CONSTRAINT user_profiles_class_private_id_fkey FOREIGN KEY (class_private_id) REFERENCES public.class_private(id)
+);
+CREATE TABLE public.app_menus (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  route text NOT NULL,
+  category uuid NOT NULL,
+  allowed_roles ARRAY,
+  allowed_level_ids ARRAY,
+  icon_class text DEFAULT 'fa-solid fa-circle'::text,
+  order_index integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT app_menus_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_menu_category FOREIGN KEY (category) REFERENCES public.menu_categories(id)
+);
+CREATE TABLE public.menu_categories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  category_key text NOT NULL UNIQUE,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  target_app text DEFAULT 'admin'::text,
+  is_active boolean DEFAULT true,
+  CONSTRAINT menu_categories_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cloudinary_accounts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  display_name text NOT NULL,
+  cloud_name text NOT NULL,
+  api_key text NOT NULL,
+  api_secret text NOT NULL,
+  upload_preset text NOT NULL,
+  usage_limit_gb numeric DEFAULT 10,
+  current_usage_gb numeric DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT cloudinary_accounts_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.gallery_contents (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  pertemuan_id uuid,
+  title text,
+  description text,
+  media_type text DEFAULT 'image'::text,
+  file_url text NOT NULL,
+  public_id text,
+  cloudinary_account_id uuid,
+  thumbnail_url text,
+  category text,
+  is_deleted boolean DEFAULT false,
+  class_id uuid,
+  caption text DEFAULT ''::text,
+  is_published boolean DEFAULT false,
+  pertemuan_private_id uuid,
+  CONSTRAINT gallery_contents_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_gallery_pertemuan FOREIGN KEY (pertemuan_id) REFERENCES public.pertemuan_kelas(id),
+  CONSTRAINT fk_gallery_account FOREIGN KEY (cloudinary_account_id) REFERENCES public.cloudinary_accounts(id),
+  CONSTRAINT gallery_contents_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT fk_gallery_pertemuan_private FOREIGN KEY (pertemuan_private_id) REFERENCES public.pertemuan_private(id)
+);
+CREATE TABLE public.activity_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  activity_type text NOT NULL,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT activity_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT activity_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.sub_levels (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  kode text NOT NULL,
+  name text NOT NULL,
+  kit_alat text,
+  description text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  order_index integer,
+  CONSTRAINT sub_levels_pkey PRIMARY KEY (id),
+  CONSTRAINT sub_levels_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.levels(id)
+);
+CREATE TABLE public.billing_periods (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  group_id uuid NOT NULL,
+  mode text NOT NULL DEFAULT 'prepaid'::text CHECK (mode = ANY (ARRAY['prepaid'::text, 'postpaid'::text])),
+  periode_label text,
+  start_date date NOT NULL,
+  end_date date,
+  quota_sessions integer NOT NULL DEFAULT 4,
+  status text NOT NULL DEFAULT 'aktif'::text CHECK (status = ANY (ARRAY['aktif'::text, 'selesai'::text])),
+  note text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT billing_periods_pkey PRIMARY KEY (id),
+  CONSTRAINT billing_periods_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.group_private(id)
+);
+CREATE TABLE public.billing_periods_sekolah (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  school_id uuid NOT NULL,
+  class_id uuid NOT NULL,
+  periode_label text,
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  contract_price numeric NOT NULL CHECK (contract_price >= 0::numeric),
+  contract_sessions integer NOT NULL DEFAULT 4 CHECK (contract_sessions >= 1),
+  status text NOT NULL DEFAULT 'aktif'::text CHECK (status = ANY (ARRAY['aktif'::text, 'selesai'::text])),
+  note text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT billing_periods_sekolah_pkey PRIMARY KEY (id),
+  CONSTRAINT billing_periods_sekolah_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT billing_periods_sekolah_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+);
+CREATE TABLE public.invoices_sekolah (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  period_id uuid NOT NULL UNIQUE,
+  school_id uuid NOT NULL,
+  class_id uuid NOT NULL,
+  periode_label text,
+  jumlah_anak integer NOT NULL,
+  jumlah_pertemuan integer NOT NULL,
+  price_per_session numeric NOT NULL,
+  total numeric NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT invoices_sekolah_pkey PRIMARY KEY (id),
+  CONSTRAINT invoices_sekolah_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.billing_periods_sekolah(id),
+  CONSTRAINT invoices_sekolah_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT invoices_sekolah_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+);

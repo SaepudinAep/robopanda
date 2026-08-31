@@ -34,10 +34,12 @@ let activeClassId = null;
 let activeSessionId = null;    
 let activeTab = 'media';       
 let rawGalleryData = []; 
+let rekapContainer = null;  // referensi container untuk modul Rekap Absensi 
 
 // --- 2. INITIALIZATION ---
 export async function init(container, profileFromIndex) {
     userProfile = profileFromIndex || { role: 'guest' };
+    rekapContainer = container; // simpan referensi untuk modul rekap
     injectStyles();
     injectJSZip(); 
     
@@ -461,9 +463,36 @@ window.switchTab = (tab) => {
     renderGalleryGrid();
 };
 
+// --- Rekap Absensi (Dynamic Import, modul terpisah agar gallery tetap ringan) ---
+window.openRekapModule = async () => {
+    if (!rekapContainer) return;
+    rekapContainer.innerHTML = `
+        <div style="padding:60px; text-align:center; color:#94a3b8;">
+            <i class="fa-solid fa-spinner fa-spin"></i> Memuat Rekap Absensi...
+        </div>`;
+
+    try {
+        const mod = await import(`./rekap-absensi-module.js?v=${Date.now()}`);
+        await mod.init(rekapContainer, {
+            userProfile,
+            onBack: () => {
+                // Kembali: render ulang layout gallery seperti semula
+                if (rekapContainer) init(rekapContainer, userProfile);
+            }
+        });
+    } catch (err) {
+        console.error('Gagal memuat modul rekap:', err);
+        rekapContainer.innerHTML = `
+            <div style="padding:50px; text-align:center; color:#ef4444;">
+                Modul Rekap Absensi gagal dimuat.
+            </div>`;
+    }
+};
+
 // --- 8. UI LAYOUT & STYLES ---
 function renderLayout(container) {
     const role = userProfile.role;
+    const privilegedRoles = ['super_admin', 'teacher', 'pic'];
     const canSeeSchool = ['super_admin', 'teacher', 'pic'].includes(role) || userProfile.class_id;
     const canSeePrivate = ['super_admin', 'teacher'].includes(role) || userProfile.class_private_id;
 
@@ -473,6 +502,12 @@ function renderLayout(container) {
                 ${canSeeSchool ? `<button class="nav-btn ${currentContext === 'school' ? 'active' : ''}" data-ctx="school" onclick="window.switchGalleryContext('school')">Sekolah</button>` : ''}
                 ${canSeePrivate ? `<button class="nav-btn ${currentContext === 'private' ? 'active' : ''}" data-ctx="private" onclick="window.switchGalleryContext('private')">Private</button>` : ''}
             </div>
+            ${privilegedRoles.includes(role) ? `
+            <div class="ug-rekap-row">
+                <button id="btn-open-rekap" class="btn-rekap" onclick="window.openRekapModule()">
+                    <i class="fa-solid fa-clipboard-list"></i> Rekap Absensi Sekolah
+                </button>
+            </div>` : ''}
             
             <div class="ug-filters">
                 <div class="filter-group" id="class-filter-wrapper" style="display:none;"><label>Kelas</label><select id="class-select" onchange="window.handleClassChange(this.value)"></select></div>
@@ -510,6 +545,9 @@ function injectStyles() {
         .ug-nav-switcher { display: flex; gap: 5px; margin-bottom: 10px; }
         .nav-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.8rem; font-weight: bold; background: white; outline: none; }
         .nav-btn.active { background: #2ecc71; color: white; border-color: #27ae60; box-shadow: 0 4px 12px rgba(46,204,113,.35); }
+        .ug-rekap-row { margin-bottom: 10px; text-align: right; }
+        .btn-rekap { background: linear-gradient(135deg,#4d97ff,#3b82f6); color: white; border: none; padding: 9px 18px; border-radius: 999px; font-weight: bold; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 12px rgba(59,130,246,.35); transition: transform .15s; }
+        .btn-rekap:hover { transform: translateY(-2px); }
         .ug-filters { display: flex; gap: 8px; background: white; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; }
         .filter-group { flex: 1; }
         .filter-group label { display: block; font-size: 0.75rem; color: #475569; font-weight: 700; margin-bottom: 3px; }
