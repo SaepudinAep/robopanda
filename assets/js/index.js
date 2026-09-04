@@ -19,13 +19,14 @@ let currentActiveModule = 'explorer-module';
 // Agar Navbar muncul 0 detik tanpa nunggu database
 const STATIC_MENUS = [
     { title: 'Home', route: 'explorer-module', icon_class: 'fa-solid fa-house', allowed_roles: '["guest"]' },
+    { title: 'Kurikulum', route: 'kurikulum-module', icon_class: 'fa-solid fa-sitemap', allowed_roles: '["super_admin","teacher","pic","student"]' },
     { title: 'Rekap', route: 'rekap-absensi-module', icon_class: 'fa-solid fa-clipboard-list', allowed_roles: '["super_admin","teacher","pic"]' },
     { title: 'Tools', route: 'tools', icon_class: 'fa-solid fa-gamepad', allowed_roles: '["guest"]' }
 ];
 
 // Versi rilis statis untuk cache-busting modul.
 // Ganti angka ini HANYA saat rilis update agar browser bisa cache modul antar kunjungan.
-const APP_VERSION = '6.9';
+const APP_VERSION = '7.1';
 
 // --- 3. INISIALISASI ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -80,6 +81,15 @@ async function fetchPublicMenus() {
                     route: 'rekap-absensi-module',
                     icon_class: 'fa-solid fa-clipboard-list',
                     allowed_roles: '["super_admin","teacher","pic"]'
+                });
+            }
+            // Pastikan tab Kurikulum (read-only) selalu tampil untuk semua role.
+            if (!allMenus.some(m => m.route === 'kurikulum-module')) {
+                allMenus.push({
+                    title: 'Kurikulum',
+                    route: 'kurikulum-module',
+                    icon_class: 'fa-solid fa-sitemap',
+                    allowed_roles: '["guest"]'
                 });
             }
             renderNavbar(allMenus);

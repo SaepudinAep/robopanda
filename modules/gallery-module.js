@@ -95,10 +95,28 @@ async function loadClassesOrGroups() {
     const wrapper = document.getElementById('class-filter-wrapper');
     if (!classSelect) return;
 
-    if (userProfile.role === 'student') {
+    const privilegedRoles = ['super_admin', 'teacher', 'pic'];
+    const isPrivileged = privilegedRoles.includes(userProfile.role);
+
+    if (!isPrivileged) {
         wrapper.style.display = 'none';
         activeClassId = currentContext === 'school' ? userProfile.class_id : userProfile.class_private_id;
-        if (activeClassId) await loadSessions();
+        if (activeClassId) {
+            await loadSessions();
+        } else {
+            const sessionSelect = document.getElementById('session-select');
+            if (sessionSelect) sessionSelect.innerHTML = '<option value="" disabled selected>Belum ada kelas terhubung</option>';
+            const tabs = document.getElementById('content-tabs');
+            if (tabs) tabs.style.display = 'none';
+            const grid = document.getElementById('ug-grid');
+            if (grid) {
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <div class="ug-empty-emoji" aria-hidden="true">🔒</div>
+                        <p>Akun Anda belum terhubung ke kelas ${currentContext === 'school' ? 'sekolah' : 'private'} mana pun.</p>
+                    </div>`;
+            }
+        }
         return;
     }
 
