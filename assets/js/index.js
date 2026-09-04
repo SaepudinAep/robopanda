@@ -1,7 +1,7 @@
 /**
  * Project: Robopanda Client
  * File: assets/js/index.js
- * Version: 6.1 - Fixed Filter Logic (Admin sees Guest Menus)
+ * Version: 6.6 - UI/UX Premium Refresh (Auth via Supabase Session, Green Theming)
  * Format: Plain Text (Huawei T10s Optimized)
  */
 
@@ -163,7 +163,15 @@ function updateAuthUI(isLoggedIn) {
     } else {
         authArea.innerHTML = `<button class="btn-login-trigger" id="btn-show-login"><i class="fa-solid fa-right-to-bracket"></i> Login Siswa</button>`;
         const btnShow = document.getElementById('btn-show-login');
-        if (btnShow) btnShow.onclick = () => document.getElementById('modal-login').classList.add('active');
+        if (btnShow) btnShow.onclick = () => {
+            const modal = document.getElementById('modal-login');
+            modal.classList.add('active');
+            // Fokus otomatis ke field email setelah modal tampil (UX + a11y)
+            setTimeout(() => {
+                const emailInput = document.getElementById('login-email');
+                if (emailInput) emailInput.focus();
+            }, 80);
+        };
     }
 }
 
@@ -201,6 +209,12 @@ function setupAuthListeners() {
     });
     const close = document.getElementById('btn-close-login');
     if (close) close.onclick = () => document.getElementById('modal-login').classList.remove('active');
+
+    // Tekan Enter di field password = langsung submit (UX form umum)
+    const pwInput = document.getElementById('login-password');
+    if (pwInput) pwInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleLogin();
+    });
 
     // Klik area gelap di luar modal untuk menutup (tidak menutup jika klik di dalam kotak)
     const modal = document.getElementById('modal-login');
