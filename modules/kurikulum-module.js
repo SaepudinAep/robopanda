@@ -49,6 +49,7 @@ let planHistoryError = false;
 // On Progress
 let progressRows = null;
 let progressLoading = false;
+let progressLevelId = null;            // Level terpilih untuk tab On Progress (mirip silabusLevelId)
 
 // Access control & Strict Scope State
 let showSchool = false;
@@ -193,6 +194,14 @@ function handleModuleClick(e) {
     const itemBtn = e.target.closest('[data-action="plan-item"]');
     if (itemBtn) {
         selectPlanItem(itemBtn.dataset.src, itemBtn.dataset.id);
+        return;
+    }
+
+    // On Progress Level Pill (mirip Silabus)
+    const prgLvBtn = e.target.closest('[data-action="prg-level"]');
+    if (prgLvBtn) {
+        progressLevelId = prgLvBtn.dataset.id;
+        renderProgress();
         return;
     }
 }
@@ -349,6 +358,8 @@ async function resolveUserScope() {
 
     // 4. SISWA / AKUN KELAS TERIKAT
     else if (userProfile.class_id || userProfile.class_private_id) {
+        console.log('[Kurikulum] Siswa X memiliki class:', { class_id: userProfile.class_id, class_private_id: userProfile.class_private_id });
+        
         if (userProfile.class_id) {
             showSchool = true;
             showPrivate = false;
@@ -358,15 +369,39 @@ async function resolveUserScope() {
                     .select('id, level, sub_level_id')
                     .eq('id', userProfile.class_id)
                     .single();
+                console.log('[Kurikulum] Data kelas ditemukan:', cls);
+                
                 if (cls?.level) {
-                    const match = levelsList.find(l => l.kode?.toLowerCase() === cls.level.toLowerCase());
-                    if (match) userAllowedLevelIds.add(match.id);
+                    // Match lebih fleksibel - coba beberapa cara
+                    const matchExact = levelsList.find(l => l.kode?.toLowerCase() === cls.level.toLowerCase());
+                    const matchCaseInsensitive = levelsList.find(l => l.kode?.toLowerCase().includes(cls.level.toLowerCase()) || cls.level.toLowerCase().includes(l.kode?.toLowerCase()));
+                    
+                    const targetMatch = matchExact || matchCaseInsensitive;
+                    
+                    console.log('[Kurikulum] Mencocokkan level:', { 
+                        classLevel: cls.level, 
+                        found: !!targetMatch, 
+                        exactMatch: !!matchExact,
+                        allLevels: levelsList.map(l => ({ kode: l.kode, id: l.id }))
+                    });
+                    
+                    if (targetMatch) {
+                        userAllowedLevelIds.add(targetMatch.id);
+                        console.log('[Kurikulum] Level ditambahkan:', targetMatch.kode, targetMatch.id);
+                    } else {
+                        console.warn('[Kurikulum] ❌ TIDAK MENCOCOKKAN LEVEL', cls.level);
+                    }
+                } else {
+                    console.warn('[Kurikulum] Kelas tidak memiliki level field');
                 }
+                
                 if (cls?.sub_level_id) {
                     const subObj = subLevelsList.find(s => s.id === cls.sub_level_id);
                     if (subObj?.level_id) userAllowedLevelIds.add(subObj.level_id);
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error('[Kurikulum] Error mengambil kelas:', e.message);
+            }
         }
         if (userProfile.class_private_id) {
             showSchool = false;
@@ -377,12 +412,29 @@ async function resolveUserScope() {
                     .select('id, level, level_id, sub_level_id')
                     .eq('id', userProfile.class_private_id)
                     .single();
+                console.log('[Kurikulum] Data private class ditemukan:', cp);
+                
                 if (cp?.level_id) userAllowedLevelIds.add(cp.level_id);
                 else if (cp?.level) {
-                    const match = levelsList.find(l => l.kode?.toLowerCase() === cp.level.toLowerCase());
-                    if (match) userAllowedLevelIds.add(match.id);
+                    const matchExact = levelsList.find(l => l.kode?.toLowerCase() === cp.level.toLowerCase());
+                    const matchCaseInsensitive = levelsList.find(l => l.kode?.toLowerCase().includes(cp.level.toLowerCase()) || cp.level.toLowerCase().includes(l.kode?.toLowerCase()));
+                    
+                    const targetMatch = matchExact || matchCaseInsensitive;
+                    
+                    console.log('[Kurikulum] Mencocokkan level private:', { 
+                        classLevel: cp.level, 
+                        found: !!targetMatch
+                    });
+                    
+                    if (targetMatch) {
+                        userAllowedLevelIds.add(targetMatch.id);
+                    } else {
+                        console.warn('[Kurikulum] ❌ TIDAK MENCOCOKKAN LEVEL PRIVATE', cp.level);
+                    }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error('[Kurikulum] Error mengambil private class:', e.message);
+            }
         }
     }
 
@@ -416,69 +468,158 @@ async function loadProgress() {
     renderProgress();
 
     const isSuperAdmin = userProfile?.role === 'super_admin';
+    
+    // Debug: Cek user profile dan class/level access
+    console.log('[Kurikulum] Load Progress dimulai:', { 
+        role: userProfile?.role,
+        hasClassId: !!userProfile.class_id,
+        hasClassPrivateId: !!userProfile.class_private_id,
+        allowedClassIds: Array.from(userAllowedClassIds || []),
+        allowedLevelIds: Array.from(userAllowedLevelIds || []),
+        showSchool, showPrivate
+    });
 
     let schoolPromise = Promise.resolve({ data: [] });
     if (showSchool) {
+        // 🔴 FIX: pertemuan_kelas TIDAK punya kolom `pertemuan_ke` & `created_at` di schema!
+        // Query hanya meminta kolom yang benar-benar ada.
         let q = supabase.from('pertemuan_kelas')
-            .select('tanggal, class_id, materi:materi_id(id, title, level_id, levels(kode)), kelas:class_id(name)')
+            .select('id, tanggal, class_id, materi_id, materi:materi_id(id, title, description, image_url, level_id, levels(kode)), kelas:class_id(name)')
             .order('tanggal', { ascending: false })
-            .order('created_at', { ascending: false })
             .limit(60);
 
         if (!isSuperAdmin && userAllowedClassIds && userAllowedClassIds.size > 0) {
             q = q.in('class_id', Array.from(userAllowedClassIds));
         }
+        
+        // Debug log: Info tentang query yang akan dijalankan
+        console.log('[Kurikulum] Query Pertemuan Sekolah (BEFORE execute)...', { 
+            allowedClassIds: Array.from(userAllowedClassIds || []),
+            limit: 60,
+            orderBy: 'tanggal DESC'
+        });
+        
         schoolPromise = q;
     }
 
     let privatePromise = Promise.resolve({ data: [] });
     if (showPrivate) {
+        // Query pertemuan private - kolom pertemuan_ke & created_at ADA di tabel ini
         let q = supabase.from('pertemuan_private')
-            .select('tanggal, class_id, pertemuan_ke, materi:materi_id(id, judul, level_id, levels(kode)), kelas:class_id(name)')
+            .select('id, tanggal, pertemuan_ke, class_id, materi_id, materi:materi_id(id, judul, deskripsi, image_url, level_id, levels(kode)), kelas:class_id(name)')
             .order('tanggal', { ascending: false })
-            .order('created_at', { ascending: false })
             .limit(60);
 
         if (!isSuperAdmin && userAllowedClassIds && userAllowedClassIds.size > 0) {
             q = q.in('class_id', Array.from(userAllowedClassIds));
         }
+        
+        // Debug log
+        console.log('[Kurikulum] Query Pertemuan Private (BEFORE execute)...', { 
+            allowedClassIds: Array.from(userAllowedClassIds || []),
+            limit: 60,
+            orderBy: 'tanggal DESC'
+        });
+        
         privatePromise = q;
     }
 
-    const [ps, pp] = await Promise.all([schoolPromise, privatePromise]);
+    try {
+        const [ps, pp] = await Promise.all([schoolPromise, privatePromise]);
+
+        console.log('[Kurikulum] Response dari Supabase (BEFORE processing):', {
+            sekolah_count: ps.data?.length || 0,
+            private_count: pp.data?.length || 0,
+            sekolah_errors: ps.error,
+            private_errors: pp.error
+        });
+
+        // Handle errors gracefully
+        if (ps.error) {
+            console.error('[Kurikulum] Error fetching sekolah meetings:', ps.error);
+        }
+        if (pp.error) {
+            console.error('[Kurikulum] Error fetching private meetings:', pp.error);
+        }
+
 
     let rows = [
         ...(ps.data || []).map(r => ({
+            id: r.id,
             tanggal: r.tanggal,
             title: r.materi?.title || '',
+            description: r.materi?.description || '',
             levelKode: r.materi?.levels?.kode || '',
             levelId: r.materi?.level_id || '',
             kelas: r.kelas?.name || '-',
-            pertemuanKe: null,
+            pertemuanKe: r.pertemuan_ke,
             src: 'skl'
         })),
         ...(pp.data || []).map(r => ({
+            id: r.id,
             tanggal: r.tanggal,
             title: r.materi?.judul || '',
+            description: r.materi?.deskripsi || '',
             levelKode: r.materi?.levels?.kode || '',
             levelId: r.materi?.level_id || '',
             kelas: r.kelas?.name || '-',
             pertemuanKe: r.pertemuan_ke,
             src: 'prv'
         }))
-    ].filter(r => r.title);
+    ].filter(r => r.title); // Hanya tampilkan yang punya materi valid
+    
+    console.log('[Kurikulum] Data setelah mapping & filter title:', { 
+        total_rows: rows.length,
+        sample_data: rows.slice(0, 3).map(r => ({
+            title: r.title,
+            levelKode: r.levelKode,
+            kelas: r.kelas,
+            tanggal: r.tanggal
+        }))
+    });
 
     // Kunci Level: Pertemuan dari level lain yang tidak diizinkan disembunyikan
     if (!isSuperAdmin && userAllowedLevelIds && userAllowedLevelIds.size > 0) {
-        rows = rows.filter(r => userAllowedLevelIds.has(r.levelId));
+        const beforeCount = rows.length;
+        const filteredRows = rows.filter(r => userAllowedLevelIds.has(r.levelId));
+        
+        console.log('[Kurikulum] Filter by level:', {
+            before_count: beforeCount,
+            after_count: filteredRows.length,
+            allowed_level_ids: Array.from(userAllowedLevelIds),
+            row_levels: [...new Set(rows.map(r => r.levelId))],
+            matched_levels: filteredRows.map(r => r.levelId)
+        });
+        
+        rows = filteredRows;
+        
+        if (rows.length === 0) {
+            console.warn('[Kurikulum] ❌ DATA HILANG SETELAH FILTER LEVEL! Periksa level_id materi.');
+            console.log('[Kurikulum] Semua row levelIds:', rows.map(r => r.levelId));
+        }
+    } else {
+        console.log('[Kurikulum] Super admin atau tidak ada filter level, semua data ditampilkan');
     }
 
+    // Sort: Terbaru dulu, kemudian urut pertemuan ke-N (jika tanggal sama)
     rows.sort((a, b) =>
         String(b.tanggal || '').localeCompare(String(a.tanggal || '')) ||
-        (b.pertemuanKe || 0) - (a.pertemuanKe || 0));
+        (b.pertemuanKe || 0) - (a.pertemuanKe || 0)
+    );
+
+    console.log('[Kurikulum] ✅ Data On Progress SELESAI dimuat:', {
+        final_count: rows.length,
+        last_date: rows[0]?.tanggal,
+        first_few: rows.slice(0, 3)
+    });
 
     progressRows = rows;
     progressLoading = false;
+    } catch (error) {
+        console.error('[Kurikulum] Fatal error loading progress:', error);
+        progressRows = [];
+        progressLoading = false;
+    }
 }
 
 async function loadPlanHistory(item) {
@@ -965,7 +1106,7 @@ function achRow(a, src) {
 }
 
 // ==========================================
-// 7. RENDER: TAB ON PROGRESS
+// 7. RENDER: TAB ON PROGRESS (Academic Document View, selaras dengan Silabus)
 // ==========================================
 function renderProgress() {
     const area = document.getElementById('kur-content');
@@ -976,7 +1117,33 @@ function renderProgress() {
         return;
     }
 
-    let rows = progressRows;
+    let baseRows = progressRows;
+
+    // ——— Filter level dulu (mirip silabus: pill level → isi level tsb) ———
+    const levelIds = [];
+    const levelCounts = {};
+    baseRows.forEach(r => {
+        const id = r.levelId || 'none:' + (r.levelKode || '');
+        if (!levelIds.some(l => l.id === id)) {
+            levelIds.push({ id, code: r.levelKode || '(Tanpa Level)' });
+            levelCounts[id] = 0;
+        }
+        levelCounts[id]++;
+    });
+    // Urutkan mengikuti urutan level pada kurikulum (levelsList)
+    levelIds.sort((a, b) => {
+        const ai = levelsList.findIndex(l => l.id === a.id);
+        const bi = levelsList.findIndex(l => l.id === b.id);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+
+    if (!levelIds.some(l => l.id === progressLevelId)) {
+        progressLevelId = levelIds[0] ? levelIds[0].id : null;
+    }
+    const currentLevel = levelIds.find(l => l.id === progressLevelId) || levelIds[0] || { code: '' };
+
+    let rows = baseRows.filter(r => (r.levelId || 'none:' + (r.levelKode || '')) === (currentLevel.id));
+
     if (searchQuery) {
         rows = rows.filter(r =>
             r.title.toLowerCase().includes(searchQuery) ||
@@ -990,36 +1157,69 @@ function renderProgress() {
         return;
     }
 
-    const groups = [];
-    rows.forEach(r => {
-        let g = groups.find(x => x.tgl === r.tanggal);
-        if (!g) { g = { tgl: r.tanggal, items: [] }; groups.push(g); }
-        g.items.push(r);
-    });
+    const pillHTML = levelIds.length > 1 ? `
+        <div class="kur-tabs-lvl">
+            ${levelIds.map(l => `
+            <button class="kur-pill ${l.id === progressLevelId ? 'active' : ''}" data-action="prg-level" data-id="${l.id}">
+                <i class="fa-solid fa-layer-group"></i> ${escapeHtml(l.code)}
+                <small>${levelCounts[l.id]} Pertemuan</small>
+            </button>`).join('')}
+        </div>` : '';
 
     area.innerHTML = `
-        <div class="kur-progress-summary">
-            <i class="fa-solid fa-bolt"></i> Menampilkan ${rows.length} pertemuan
-            &bull; Tersebar di ${groups.length} hari kegiatan
-        </div>
-        ${groups.map(g => `
-        <div class="kur-day">
-            <div class="kur-day-head"><i class="fa-solid fa-calendar-day"></i> ${escapeHtml(fmtDate(g.tgl))}</div>
-            ${g.items.map(r => `
-            <div class="kur-day-row">
-                <div class="kur-day-robot">
-                    <i class="fa-solid fa-robot"></i>
-                    <b>${escapeHtml(r.title)}</b>
-                    ${r.levelKode ? `<span class="kur-badge lvl">${escapeHtml(r.levelKode)}</span>` : ''}
+        ${pillHTML}
+
+        <div class="kur-syll-doc">
+            <div class="kur-syll-doc-header">
+                <div class="kur-syll-doc-title">
+                    <h3>REKAP PROGRES PEMBELAJARAN: ${escapeHtml(currentLevel.code)}</h3>
+                    <p>Riwayat pertemuan pembelajaran terbaru (level ${escapeHtml(currentLevel.code)}).</p>
                 </div>
-                <div class="kur-day-meta">
-                    ${srcBadge(r.src)}
-                    ${r.pertemuanKe ? `<span class="kur-badge num">Pertemuan ke-${escapeHtml(r.pertemuanKe)}</span>` : ''}
-                    <span class="kur-day-class"><i class="fa-solid fa-users"></i> ${escapeHtml(r.kelas)}</span>
+                <div class="kur-syll-doc-meta">
+                    <span class="kur-syll-chip"><i class="fa-solid fa-robot"></i> ${rows.length} Pertemuan</span>
                 </div>
-            </div>`).join('')}
-        </div>`).join('')}`;
+            </div>
+
+            <div class="kur-table-responsive kur-progress-table-wrap">
+                <table class="kur-syll-table kur-progress-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Sesi</th>
+                            <th style="width: 150px;">Tanggal</th>
+                            <th>Nama Materi</th>
+                            <th>Deskripsi singkat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map((r, iIdx) => {
+                            const ringkas = shortDesc(r.description);
+                            return `
+                            <tr>
+                                <td class="text-center font-bold">${iIdx + 1}</td>
+                                <td><span class="kur-progress-tgl">${escapeHtml(fmtDateShort(r.tanggal))}</span></td>
+                                <td>
+                                    <div class="kur-syll-materi-title">${escapeHtml(r.title)}</div>
+                                    ${srcBadge(r.src)}
+                                    ${r.levelKode ? `<span class="kur-badge lvl">${escapeHtml(r.levelKode)}</span>` : ''}
+                                </td>
+                                <td>
+                                    ${ringkas ? `<div class="kur-syll-desc">${escapeHtml(ringkas)}</div>` : `<span class="kur-text-muted">-</span>`}
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
 }
+
+// Format tanggal ringkas untuk tabel rekap (cth: 3 Sep 2026)
+const fmtDateShort = (tgl) => {
+    if (!tgl) return '-';
+    try {
+        return new Date(String(tgl) + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch (e) { return String(tgl); }
+};
 
 const emptyBox = (msg) => `<div class="kur-empty"><i class="fa-solid fa-folder-open fa-2x"></i> <span>${escapeHtml(msg)}</span></div>`;
 const emptyBoxSmall = (msg) => `<div class="kur-empty small">${escapeHtml(msg)}</div>`;
@@ -1107,6 +1307,7 @@ function injectStyles() {
         .kur-syll-table tr:hover td { background: #f8fafc; }
         .kur-syll-materi-title { font-weight: 700; color: #1e293b; font-size: .92rem; margin-bottom: 4px; }
         .kur-syll-desc { color: #475569; font-size: .84rem; line-height: 1.4; }
+        .kur-day-class { color: #64748b; font-size: .84rem; white-space: nowrap; }
 
         .kur-kit { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
         .kur-kit.warn { background: #fffbeb; color: #b45309; border-color: #fcd34d; }
@@ -1181,25 +1382,22 @@ function injectStyles() {
         .kur-history-date { font-weight: 700; color: #1e293b; }
         .kur-history-class { color: #64748b; }
 
-        /* On Progress */
-        .kur-progress-summary { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-weight: 700; font-size: .85rem; padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; }
-        .kur-day { margin-bottom: 20px; }
-        .kur-day-head { font-weight: 700; color: #1e874b; font-size: .9rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-        .kur-day-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; transition: .15s; }
-        .kur-day-row:hover { border-color: #a7f3d0; background: #f6fef9; }
-        .kur-day-robot { display: flex; align-items: center; gap: 10px; font-size: .92rem; color: #1e293b; flex-wrap: wrap; }
-        .kur-day-robot i { color: #2ecc71; }
-        .kur-day-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .kur-day-class { color: #64748b; font-size: .82rem; }
+        /* On Progress — satu tabel rekap ala Silabus */
+        .kur-progress-table-wrap { margin-bottom: 0; }
+        .kur-progress-table td:nth-child(2) { white-space: nowrap; }
+        .kur-progress-tgl { color: #334155; font-weight: 600; font-size: .86rem; }
+        .kur-progress-table .kur-syll-materi-title { font-size: .9rem; }
 
         /* Print Styles */
         @media print {
             body { background: #fff !important; color: #000 !important; }
-            .kur-header-actions, .kur-sticky-bar, .kur-tabs-lvl, .kur-syll-arrow { display: none !important; }
+            .kur-header, .kur-header-actions, .kur-sticky-bar, .kur-tabs-lvl, .kur-syll-arrow { display: none !important; }
             .kur-syll-doc { border: none !important; box-shadow: none !important; padding: 0 !important; }
             .kur-syll-kit-card { border: 1px solid #ccc !important; break-inside: auto; }
             .kur-syll-kit-card.collapsed .kur-syll-kit-body { display: block !important; }
             .kur-syll-table th { background: #eee !important; color: #000 !important; }
+            .kur-syll-table thead { display: table-header-group; }
+            .kur-progress-table tr { break-inside: avoid; page-break-inside: avoid; }
             .kur-plan-list { display: none !important; }
             .kur-plan-detail { border: none !important; box-shadow: none !important; }
             .kur-rpp-sec { break-inside: auto; }
