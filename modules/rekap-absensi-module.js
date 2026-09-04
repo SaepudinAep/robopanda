@@ -1,12 +1,12 @@
 /**
  * Project: Robopanda Client (Public/Student)
  * File: modules/rekap-absensi-module.js
- * Version: 1.0 - Rekap Absensi Sekolah (Tampil-saja, Tanpa Export)
+ * Version: 2.0 - Rekap Absensi & Materi sebagai Modul Mandiri (Tab Navbar)
  *
  * Description:
- *  Laporan absensi & pembelajaran & materi/silabus terajarkan per kelas,
- *  mengikuti semester & tahun ajaran aktif, dibuka dari Gallery Module
- *  melalui dynamic import agar kinerja modul yang ada tidak terganggu.
+ *  Laporan absensi & materi/silabus terajarkan per kelas, mengikuti
+ *  semester & tahun ajaran aktif. Kini berdiri sendiri sebagai tab navbar
+ *  (dimuat via loadModule), tidak lagi dibuka dari dalam Gallery Module.
  *
  * Catatan: Hanya menampilkan data sesuai yang ada di database (read-only).
  *  Tidak ada agregasi/ringkasan, tidak ada fitur export/cetak.
@@ -27,8 +27,8 @@ const RK_LAST_FILTER_KEY = 'rekap_absensi_last_filter';
 // ---------------------------------------------------------------
 let app = {
     userProfile: null,      // profil dari user_profiles (role mapping)
-    onBack: null,           // callback kembali ke gallery
-    initialClassId: null,   // kelas yang diteruskan dari Gallery jika ada
+    onBack: null,           // callback kembali (opsional; default ke Beranda)
+    initialClassId: null,   // kelas awal yang diteruskan pemanggil jika ada
     activeClass: null,      // { id, name, jadwal, level, schoolName }
     students: [],           // [{ id, name, grade }] siswa kelas aktif
     pertemuanList: [],      // [{ id, tanggal, judul, uraian }] urut ascending
@@ -53,10 +53,10 @@ export async function init(canvas, opts = {}) {
         <div class="rk-container">
             <div class="rk-top">
                 <div class="rk-title-area">
-                    <h2>📋 Rekapitulasi Absensi</h2>
+                    <h2>📋 Rekap Absensi & Materi</h2>
                     <span class="rk-active-term-badge" id="rk-active-term-label">Memuat Semester...</span>
                 </div>
-                <button id="rk-back" class="rk-btn rk-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Kembali ke Galeri</button>
+                <button id="rk-back" class="rk-btn rk-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Beranda</button>
             </div>
 
             <!-- Filter Cepat: Langsung Pilih Kelas (Semester Aktif Terpilih Otomatis) -->
@@ -532,7 +532,7 @@ function updateActiveBtn(btnId) {
 function setupEvents() {
     document.getElementById('rk-back').addEventListener('click', () => {
         if (typeof app.onBack === 'function') app.onBack();
-        else if (window.loadModule) window.loadModule('gallery-module');
+        else if (window.loadModule) window.loadModule('explorer-module');
     });
 
     // Pilih kelas -> langsung muat tanpa tombol manual

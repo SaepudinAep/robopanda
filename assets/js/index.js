@@ -1,7 +1,7 @@
 /**
  * Project: Robopanda Client
  * File: assets/js/index.js
- * Version: 6.6 - UI/UX Premium Refresh (Auth via Supabase Session, Green Theming)
+ * Version: 6.7 - Rekap Absensi jadi Modul Mandiri (Tab Navbar)
  * Format: Plain Text (Huawei T10s Optimized)
  */
 
@@ -19,12 +19,13 @@ let currentActiveModule = 'explorer-module';
 // Agar Navbar muncul 0 detik tanpa nunggu database
 const STATIC_MENUS = [
     { title: 'Home', route: 'explorer-module', icon_class: 'fa-solid fa-house', allowed_roles: '["guest"]' },
+    { title: 'Rekap', route: 'rekap-absensi-module', icon_class: 'fa-solid fa-clipboard-list', allowed_roles: '["super_admin","teacher","pic"]' },
     { title: 'Tools', route: 'tools', icon_class: 'fa-solid fa-gamepad', allowed_roles: '["guest"]' }
 ];
 
 // Versi rilis statis untuk cache-busting modul.
 // Ganti angka ini HANYA saat rilis update agar browser bisa cache modul antar kunjungan.
-const APP_VERSION = '6.6';
+const APP_VERSION = '6.7';
 
 // --- 3. INISIALISASI ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -71,6 +72,16 @@ async function fetchPublicMenus() {
             .order('order_index');
 
         if (allMenus) {
+            // Pastikan tab Rekap (modul mandiri) selalu tampil bagi role berwenang,
+            // meskipun entri menu-nya belum dibuat di tabel app_menus.
+            if (!allMenus.some(m => m.route === 'rekap-absensi-module')) {
+                allMenus.push({
+                    title: 'Rekap',
+                    route: 'rekap-absensi-module',
+                    icon_class: 'fa-solid fa-clipboard-list',
+                    allowed_roles: '["super_admin","teacher","pic"]'
+                });
+            }
             renderNavbar(allMenus);
         }
     } catch (err) {

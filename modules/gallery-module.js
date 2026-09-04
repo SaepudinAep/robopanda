@@ -34,7 +34,6 @@ let activeClassId = null;
 let activeSessionId = null;    
 let activeTab = 'media';       
 let rawGalleryData = []; 
-let rekapContainer = null;  // referensi container untuk modul Rekap Absensi 
 
 // [SEMESTER] Dropdown semester terdaftar: daftar kelas wajib mengikuti semester terpilih.
 let gallerySemesters = [];     // cache semester dari tabel semesters {id, name, is_active}
@@ -43,7 +42,6 @@ let activeSemesterId = null;   // semester terpilih pada filter Gallery
 // --- 2. INITIALIZATION ---
 export async function init(container, profileFromIndex) {
     userProfile = profileFromIndex || { role: 'guest' };
-    rekapContainer = container; // simpan referensi untuk modul rekap
     injectStyles();
     injectJSZip(); 
     
@@ -538,35 +536,6 @@ window.switchTab = (tab) => {
     renderGalleryGrid();
 };
 
-// --- Rekap Absensi (Dynamic Import, modul terpisah agar gallery tetap ringan) ---
-// Gunakan versi rilis statis (bukan Date.now) agar file bisa di-cache browser.
-const REKAP_MODULE_VERSION = '1.0';
-window.openRekapModule = async () => {
-    if (!rekapContainer) return;
-    rekapContainer.innerHTML = `
-        <div style="padding:60px; text-align:center; color:#94a3b8;">
-            <i class="fa-solid fa-spinner fa-spin"></i> Memuat Rekap Absensi...
-        </div>`;
-
-    try {
-        const mod = await import(`./rekap-absensi-module.js?v=${REKAP_MODULE_VERSION}`);
-        await mod.init(rekapContainer, {
-            userProfile,
-            initialClassId: activeClassId, // [INTEGRASI] Teruskan kelas aktif agar langsung terbuka
-            onBack: () => {
-                // Kembali: render ulang layout gallery seperti semula
-                if (rekapContainer) init(rekapContainer, userProfile);
-            }
-        });
-    } catch (err) {
-        console.error('Gagal memuat modul rekap:', err);
-        rekapContainer.innerHTML = `
-            <div style="padding:50px; text-align:center; color:#ef4444;">
-                Modul Rekap Absensi gagal dimuat.
-            </div>`;
-    }
-};
-
 window.openExplorerForCurrentSession = () => {
     const sessionSelect = document.getElementById('session-select');
     if (!sessionSelect || sessionSelect.selectedIndex < 0) return;
@@ -583,7 +552,6 @@ window.openExplorerForCurrentSession = () => {
 // --- 8. UI LAYOUT & STYLES ---
 function renderLayout(container) {
     const role = userProfile.role;
-    const privilegedRoles = ['super_admin', 'teacher', 'pic'];
     const canSeeSchool = ['super_admin', 'teacher', 'pic'].includes(role) || userProfile.class_id;
     const canSeePrivate = ['super_admin', 'teacher'].includes(role) || userProfile.class_private_id;
 
@@ -593,12 +561,6 @@ function renderLayout(container) {
                 ${canSeeSchool ? `<button class="nav-btn ${currentContext === 'school' ? 'active' : ''}" data-ctx="school" onclick="window.switchGalleryContext('school')">Sekolah</button>` : ''}
                 ${canSeePrivate ? `<button class="nav-btn ${currentContext === 'private' ? 'active' : ''}" data-ctx="private" onclick="window.switchGalleryContext('private')">Private</button>` : ''}
             </div>
-            ${privilegedRoles.includes(role) ? `
-            <div class="ug-rekap-row">
-                <button id="btn-open-rekap" class="btn-rekap" onclick="window.openRekapModule()">
-                    <i class="fa-solid fa-clipboard-list"></i> Rekap Absensi Kelas Ini
-                </button>
-            </div>` : ''}
             
             <div class="ug-filters">
                 <div class="filter-group" id="semester-filter-wrapper" style="display:none;"><label>Semester</label><select id="semester-select" onchange="window.handleSemesterChange(this.value)"></select></div>
@@ -645,9 +607,6 @@ function injectStyles() {
         .ug-nav-switcher { display: flex; gap: 5px; margin-bottom: 10px; }
         .nav-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.8rem; font-weight: bold; background: white; outline: none; }
         .nav-btn.active { background: #2ecc71; color: white; border-color: #27ae60; box-shadow: 0 4px 12px rgba(46,204,113,.35); }
-        .ug-rekap-row { margin-bottom: 10px; text-align: right; }
-        .btn-rekap { background: linear-gradient(135deg,#2ecc71,#27ae60); color: white; border: none; padding: 9px 18px; border-radius: 999px; font-weight: bold; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 12px rgba(46,204,113,.35); transition: transform .15s; }
-        .btn-rekap:hover { transform: translateY(-2px); }
         .btn-info-mini { padding: 6px 10px; border: 1px solid #c8e6c9; border-radius: 5px; background: #f0fdf4; cursor: pointer; font-size: 0.8rem; color: #27ae60; transition: all .15s; }
         .btn-info-mini:hover { background: #d1fae5; }
         .ug-filters { display: flex; gap: 8px; background: white; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; }
