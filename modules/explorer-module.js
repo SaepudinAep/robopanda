@@ -5,11 +5,11 @@
  */
 
 // 1. IMPORT LIBRARY (WAJIB ADA)
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-import { supabaseUrl, supabaseKey } from '../assets/js/config.js';
+import { supabase } from '../assets/js/config.js';
+import { escapeHtml } from '../assets/js/utils.js';
 
-// 2. INISIALISASI CLIENT (INI YANG SEBELUMNYA HILANG)
-const supabase = createClient(supabaseUrl, supabaseKey);
+// 2. Client Supabase singleton dibagikan dari config.js
+//    (sebelumnya setiap modul membuat instance sendiri → boros memori/koneksi)
 
 // --- State Management (Tetap Asli) ---
 let allLevels = [];
@@ -20,18 +20,26 @@ let allLevels = [];
  */
 export async function init(container, userProfile) {
     // Memanggil fungsi utama Bapak
-    await initExplorer(container);
+    await initExplorer(container, userProfile);
     
     // Kirim log sederhana untuk memastikan data profil sampai (Opsional)
     if (userProfile) console.log("Explorer dimuat untuk siswa:", userProfile.name);
 }
 
-export async function initExplorer(container) {
+export async function initExplorer(container, userProfile) {
+    // Sambutan personal jika sudah login
+    const greetName = userProfile?.name
+        ? `, ${escapeHtml(userProfile.name.split(' ')[0])}`
+        : '';
+    const greeting = userProfile?.name
+        ? `Halo${greetName}! 👋`
+        : 'Jelajahi Misi Robotik 🤖';
+
     // 1. Injeksi Struktur HTML
     container.innerHTML = `
         <div class="explorer-page-head">
             <span class="explorer-eyebrow">Robopanda Explorer</span>
-            <h1 class="explorer-page-title">Jelajahi Misi Robotik 🤖</h1>
+            <h1 class="explorer-page-title">${greeting}</h1>
             <p>Pilih level favorit atau cari misi untuk lihat hasil karya kelas terbaru.</p>
         </div>
 
@@ -71,7 +79,7 @@ export async function initExplorer(container) {
                     <div class="content-block"><h3>Ringkasan Misi</h3><p id="modal-description"></p></div>
                     <div class="content-block"><h3>Rencana Pembelajaran</h3><div id="modal-detail" class="detail-text"></div></div>
                     <div style="margin-top: 20px; text-align: center;">
-                        <button id="btn-modal-to-gallery" class="btn-login-trigger" style="background:#2ecc71; padding: 10px 22px; font-size: 0.85rem; cursor:pointer; border:none; border-radius:999px; color:#fff; font-weight:700;" onclick="const m=document.getElementById('modal-explorer');if(m)m.classList.remove('active');document.body.style.overflow='';if(window.loadModule){window.loadModule('gallery-module');}">
+                        <button id="btn-modal-to-gallery" class="btn-login-trigger" onclick="const m=document.getElementById('modal-explorer');if(m)m.classList.remove('active');document.body.style.overflow='';if(window.loadModule){window.loadModule('gallery-module');}">
                             <i class="fa-solid fa-camera"></i> Lihat Galeri Hasil Karya
                         </button>
                     </div>
@@ -150,9 +158,11 @@ function renderCards(items, containerId) {
         const levelIcon = getIconByLevel(item.level_kode);
         const sourceIcon = item.source === "private" ? "🏠" : "🏫";
         const sourceLabel = item.source === "private" ? "Private" : "Sekolah";
+        const title = escapeHtml(item.title);
+        const levelKode = escapeHtml(item.level_kode);
 
         const mediaDisplay = item.image_url ? `
-            <img src="${item.image_url}" class="card-img-main" loading="lazy" alt="Ilustrasi ${item.title}"
+            <img src="${escapeHtml(item.image_url)}" class="card-img-main" loading="lazy" alt="Ilustrasi ${title}"
                  onerror="this.src='https://placehold.co/400x400?text=' + encodeURIComponent('🤖')">
             ${showWatermark ? `<img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" class="card-watermark" alt="" aria-hidden="true">` : ""}
         ` : `<div class="card-icon-fallback">${levelIcon}</div>`;
@@ -160,14 +170,14 @@ function renderCards(items, containerId) {
         return `
             <article class="materi-card" role="button" tabindex="0"
                      data-id="${item.id}" data-tgl="${item.tanggal}" data-src="${item.source}"
-                     aria-label="Buka misi ${item.title}"
+                     aria-label="Buka misi ${title}"
                      onclick="openModalExplorer('${item.id}', '${item.tanggal}', '${item.source}')">
                 <div class="card-image">${mediaDisplay}</div>
                 <div class="card-content">
                     <div class="card-topline">
-                        <span class="level-badge" data-level="${item.level_kode}">${levelIcon} ${item.level_kode}</span>
+                        <span class="level-badge" data-level="${levelKode}">${levelIcon} ${levelKode}</span>
                     </div>
-                    <h3 class="card-title">${item.title}</h3>
+                    <h3 class="card-title">${title}</h3>
                     <div class="card-meta">
                         <span class="card-meta-item"><span class="ic" aria-hidden="true">${sourceIcon}</span> ${sourceLabel}</span>
                         <span class="card-meta-item"><span class="ic" aria-hidden="true">📅</span> ${tgl}</span>
@@ -212,10 +222,11 @@ async function loadLevelRows() {
 
     results.forEach(({ lvl, items }) => {
         if (items.length > 0) {
+            const lvlKode = escapeHtml(lvl.kode);
             const rowHtml = `
-                <section class="feed-section" id="row-${lvl.kode}">
-                    <div class="section-header"><h2><span class="section-icon">${getIconByLevel(lvl.kode)}</span> ${lvl.kode} <small>Recent History</small></h2></div>
-                    <div class="horizontal-scroll" id="list-${lvl.id}" data-level-row="${lvl.kode}"></div>
+                <section class="feed-section" id="row-${lvlKode}">
+                    <div class="section-header"><h2><span class="section-icon">${getIconByLevel(lvl.kode)}</span> ${lvlKode} <small>Recent History</small></h2></div>
+                    <div class="horizontal-scroll" id="list-${lvl.id}" data-level-row="${lvlKode}"></div>
                 </section>`;
             container.insertAdjacentHTML("beforeend", rowHtml);
             renderCards(items, `list-${lvl.id}`);
@@ -269,6 +280,39 @@ function filterByLevel(kode, btn) {
     }
 }
 
+// Guard: bind keyboard handler HANYA sekali per sesi SPA.
+// Sebelumnya listener document.keydown ditambahkan setiap init → menumpuk (memory leak).
+let explorerKeyBound = false;
+
+function closeExplorerModal() {
+    const modal = document.getElementById("modal-explorer");
+    if (modal) modal.classList.remove("active");
+    document.body.style.overflow = "";
+}
+
+function bindExplorerKeyboard() {
+    if (explorerKeyBound) return;
+    explorerKeyBound = true;
+
+    document.addEventListener('keydown', (e) => {
+        const modal = document.getElementById("modal-explorer");
+        if (!modal) return;
+
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+            closeExplorerModal();
+            return;
+        }
+
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.materi-card')) {
+            const card = e.target.closest('.materi-card');
+            if (card.dataset.id) {
+                e.preventDefault();
+                openModalExplorer(card.dataset.id, card.dataset.tgl, card.dataset.src);
+            }
+        }
+    });
+}
+
 function setupEventListeners() {
     // 1. Search Logic + status hasil
     const searchInput = document.getElementById("searchMateri");
@@ -318,32 +362,16 @@ function setupEventListeners() {
     const modal = document.getElementById("modal-explorer");
     const closeBtn = document.getElementById("closeModal");
 
-    function closeExplorerModal() {
-        if (modal) modal.classList.remove("active");
-        document.body.style.overflow = "";
-    }
-
     if (closeBtn) closeBtn.onclick = closeExplorerModal;
 
     if (modal) {
         modal.addEventListener('click', (e) => {
             if (e.target.id === "modal-explorer") closeExplorerModal();
         });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && modal.classList.contains('active')) closeExplorerModal();
-        });
     }
 
-    // 3. Keyboard support untuk kartu (role=button)
-    document.addEventListener('keydown', (e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.materi-card')) {
-            const card = e.target.closest('.materi-card');
-            if (card.dataset.id) {
-                e.preventDefault();
-                openModalExplorer(card.dataset.id, card.dataset.tgl, card.dataset.src);
-            }
-        }
-    });
+    // 3. Keyboard support (Esc + kartu role=button) — bind sekali saja
+    bindExplorerKeyboard();
 }
 
 // Tetap global agar onclick di HTML string kartu bisa memanggilnya

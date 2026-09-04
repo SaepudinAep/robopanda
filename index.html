@@ -9,37 +9,19 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <link rel="stylesheet" href="assets/css/style_explorer.css" />
-  
-  <style>
-    #app-content { min-height: 60vh; }
-    .nav-user-area { display: flex; align-items: center; gap: 10px; }
-    .btn-login-trigger { 
-      background: #3b82f6; color: white; padding: 8px 16px; 
-      border-radius: 50px; font-weight: bold; font-size: 0.8rem; border: none; cursor: pointer;
-    }
-    .login-modal {
-      display: none; position: fixed; inset: 0; z-index: 9999;
-      background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
-      justify-content: center; align-items: center;
-    }
-    .login-box {
-      background: white; padding: 30px; border-radius: 16px;
-      width: 100%; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
-    }
-  </style>
 </head>
 <body>
 
 <header class="explorer-header">
-  <div class="header-top" style="justify-content: space-between;">
-    <div class="logo-area" onclick="window.location.reload()" style="cursor:pointer">
+  <div class="header-top">
+    <div class="logo-area" onclick="window.location.reload()" role="button" tabindex="0" aria-label="Muat ulang halaman">
       <img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" alt="Logo Robopanda" class="main-logo" />
     </div>
     <div class="nav-user-area" id="auth-area"></div>
   </div>
 
   <div class="header-nav-row">
-    <nav class="main-nav-pills" id="main-nav-categories"></nav>
+    <nav class="main-nav-pills" id="main-nav-categories" aria-label="Navigasi utama"></nav>
   </div>
 </header>
 
@@ -49,25 +31,46 @@
     </div>
   </main>
 
-  <div class="login-modal" id="modal-login">
+  <div class="login-modal" id="modal-login" role="dialog" aria-modal="true" aria-labelledby="login-title">
     <div class="login-box">
-      <h2 style="font-family: 'Fredoka One', cursive; color: #3b82f6; margin-bottom: 20px;">Halo Sahabat Panda! 🐼</h2>
-      <div class="form-group" style="margin-bottom: 15px;">
-        <label style="display:block; font-size: 0.8rem; margin-bottom: 5px;">Email Terdaftar</label>
-        <input type="email" id="login-email" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
+      <div class="login-box-logo">
+        <img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" alt="Logo Robopanda" />
       </div>
-      <div class="form-group" style="margin-bottom: 20px;">
-        <label style="display:block; font-size: 0.8rem; margin-bottom: 5px;">Password</label>
-        <input type="password" id="login-password" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
+      <h2 id="login-title">Halo Sahabat Panda! 🐼</h2>
+      <p class="login-box-sub">Masuk untuk melihat misi &amp; hasil karya kelasmu.</p>
+      <div class="form-group">
+        <label for="login-email">Email Terdaftar</label>
+        <input type="email" id="login-email" placeholder="contoh@email.com" autocomplete="email" />
       </div>
-      <button id="btn-do-login" class="btn-login-trigger" style="width:100%;">Masuk Sekarang</button>
-      <button id="btn-close-login" style="width:100%; margin-top: 10px; background:transparent; border:none; color: #999; font-size: 0.8rem; cursor:pointer;">Nanti Saja</button>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="Masukkan password" autocomplete="current-password" />
+      </div>
+      <button id="btn-do-login" class="btn-login-trigger">Masuk Sekarang</button>
+      <button id="btn-close-login" class="btn-close-login">Nanti Saja</button>
     </div>
   </div>
 
   <footer class="explorer-footer">
-    <div class="footer-bottom">
-      <p>&copy; 2026 Robopanda Robotic Curriculum.</p>
+    <div class="cta-container">
+      <div class="cta-card">
+        <div class="cta-content">
+          <h3>Mau Lihat Robot Lainnya? 🚀</h3>
+          <p>Ikuti perjalanan seru kami membangun berbagai robot unik setiap harinya!</p>
+        </div>
+
+        <a href="https://www.instagram.com/robopandarobotic/" target="_blank" rel="noopener" class="btn-ig-premium">
+          <svg class="icon-ig-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" aria-hidden="true">
+            <path d="M224.1 141c-63.6 0-114.9 51.3-114.9 114.9s51.3 114.9 114.9 114.9S339 319.5 339 255.9 287.7 141 224.1 141zm0 189.6c-41.1 0-74.7-33.5-74.7-74.7s33.5-74.7 74.7-74.7 74.7 33.5 74.7 74.7-33.6 74.7-74.7 74.7zm146.4-194.3c0 14.9-12 26.8-26.8 26.8-14.9 0-26.8-12-26.8-26.8s12-26.8 26.8-26.8 26.8 12 26.8 26.8zm76.1 27.2c-1.7-35.9-9.9-67.7-36.2-93.9-26.2-26.2-58-34.4-93.9-36.2-37-2.1-147.9-2.1-184.9 0-35.8 1.7-67.6 9.9-93.9 36.1s-34.4 58-36.2 93.9c-2.1 37-2.1 147.9 0 184.9 1.7 35.9 9.9 67.7 36.2 93.9s58 34.4 93.9 36.2c37 2.1 147.9 2.1 184.9 0 35.9-1.7 67.7-9.9 93.9-36.2 26.2-26.2 34.4-58 36.2-93.9 2.1-37 2.1-147.8 0-184.8zM398.8 388c-7.8 19.6-22.9 34.7-42.6 42.6-29.5 11.7-99.5 9-132.1 9s-102.7 2.6-132.1-9c-19.6-7.8-34.7-22.9-42.6-42.6-11.7-29.5-9-99.5-9-132.1s-2.6-102.7 9-132.1c7.8-19.6 22.9-34.7 42.6-42.6 29.5-11.7 99.5-9 132.1-9s102.7-2.6 132.1 9c19.6 7.8 34.7 22.9 42.6 42.6 11.7 29.5 9 99.5 9 132.1s2.7 102.7-9 132.1z"/>
+          </svg>
+          Follow @robopandarobotic
+        </a>
+      </div>
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 Robopanda Robotic Curriculum.</p>
+        <small>Proses yang bekerja, edukasi yang nyata.</small>
+      </div>
     </div>
   </footer>
 

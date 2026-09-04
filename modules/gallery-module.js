@@ -5,10 +5,10 @@
  * Format: Plain Text (Anti-Crash Optimized)
  */
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-import { supabaseUrl, supabaseKey } from '../assets/js/config.js';
+import { supabase } from '../assets/js/config.js';
+import { escapeHtml } from '../assets/js/utils.js';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Client Supabase singleton dibagikan dari config.js
 
 // --- 1. CONFIGURATION ---
 const LOGO_B64 = 'aHR0cHM6Ly9yZXMuY2xvdWRpbmFyeS5jb20vZG1tNmF2dHhkL2ltYWdlL3VwbG9hZC9Sb2JvcGFuZGEtRWR1Y2F0aW9uX3p3eDBibS5wbmc=';
@@ -123,7 +123,7 @@ async function loadClassesOrGroups() {
     const { data } = await query.order('name');
     if (data) {
         classSelect.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
-            data.map(c => `<option value="${c.id}">${c.name} ${c.schools?.name ? `(${c.schools.name})` : ''}</option>`).join('');
+            data.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.schools?.name ? ` (${escapeHtml(c.schools.name)})` : ''}</option>`).join('');
     }
 }
 
@@ -158,7 +158,7 @@ function renderSemesterOptions() {
         String(a.name).localeCompare(String(b.name))
     );
     semSelect.innerHTML = '<option value="" disabled ' + (activeSemesterId ? '' : 'selected') + '>-- Pilih Semester --</option>' +
-        sorted.map(s => `<option value="${s.id}" ${s.id === activeSemesterId ? 'selected' : ''}>${s.name}${s.is_active ? ' (Aktif)' : ''}</option>`).join('');
+        sorted.map(s => `<option value="${s.id}" ${s.id === activeSemesterId ? 'selected' : ''}>${escapeHtml(s.name)}${s.is_active ? ' (Aktif)' : ''}</option>`).join('');
 }
 
 async function ensureSemesterFilterVisible() {
@@ -190,7 +190,7 @@ async function loadSessions() {
             data.map(s => {
                 const date = new Date(s.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
                 const title = isSchool ? (s.materi?.title || 'Kegiatan') : (s.materi_private?.judul || `Sesi ${s.pertemuan_ke}`);
-                return `<option value="${s.id}" data-materi-id="${s.materi_id || ''}" data-date="${s.tanggal}">${date} : ${title}</option>`;
+                return `<option value="${s.id}" data-materi-id="${s.materi_id || ''}" data-date="${s.tanggal}">${date} : ${escapeHtml(title)}</option>`;
             }).join('');
         
         // Auto-pilih sesi terbaru agar tidak perlu klik 2x
@@ -282,7 +282,7 @@ function renderGalleryGrid() {
                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openSwipeGallery(${index});}">
                 <img src="${utils.getTransformUrl(item.file_url, 'GRID', false)}" loading="lazy" alt="Dokumentasi ${index + 1}" onerror="this.src='${CONFIG.PLACEHOLDER}'">
                 ${item.media_type === 'youtube' ? '<div class="yt-icon"><i class="fa-brands fa-youtube"></i></div>' : ''}
-                <div class="ug-caption">${utils.getSystemCaption(index)}</div>
+                <div class="ug-caption">${escapeHtml(utils.getSystemCaption(index))}</div>
             </div>`;
     }).join('');
 }
@@ -539,6 +539,8 @@ window.switchTab = (tab) => {
 };
 
 // --- Rekap Absensi (Dynamic Import, modul terpisah agar gallery tetap ringan) ---
+// Gunakan versi rilis statis (bukan Date.now) agar file bisa di-cache browser.
+const REKAP_MODULE_VERSION = '1.0';
 window.openRekapModule = async () => {
     if (!rekapContainer) return;
     rekapContainer.innerHTML = `
@@ -547,7 +549,7 @@ window.openRekapModule = async () => {
         </div>`;
 
     try {
-        const mod = await import(`./rekap-absensi-module.js?v=${Date.now()}`);
+        const mod = await import(`./rekap-absensi-module.js?v=${REKAP_MODULE_VERSION}`);
         await mod.init(rekapContainer, {
             userProfile,
             initialClassId: activeClassId, // [INTEGRASI] Teruskan kelas aktif agar langsung terbuka
@@ -605,7 +607,7 @@ function renderLayout(container) {
                     <label>Materi / Sesi</label>
                     <div style="display:flex; gap:5px;">
                         <select id="session-select" style="flex:1;" onchange="window.handleSessionChange(this.value)"></select>
-                        <button id="btn-view-materi-info" onclick="window.openExplorerForCurrentSession()" title="Lihat Detail Misi Explorer" style="padding:6px 10px; border:1px solid #cbd5e1; border-radius:5px; background:#f8fafc; cursor:pointer; font-size:0.8rem; color:#3b82f6;">
+                        <button id="btn-view-materi-info" onclick="window.openExplorerForCurrentSession()" title="Lihat Detail Misi Explorer" class="btn-info-mini">
                             <i class="fa-solid fa-circle-info"></i>
                         </button>
                     </div>
@@ -644,8 +646,10 @@ function injectStyles() {
         .nav-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.8rem; font-weight: bold; background: white; outline: none; }
         .nav-btn.active { background: #2ecc71; color: white; border-color: #27ae60; box-shadow: 0 4px 12px rgba(46,204,113,.35); }
         .ug-rekap-row { margin-bottom: 10px; text-align: right; }
-        .btn-rekap { background: linear-gradient(135deg,#4d97ff,#3b82f6); color: white; border: none; padding: 9px 18px; border-radius: 999px; font-weight: bold; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 12px rgba(59,130,246,.35); transition: transform .15s; }
+        .btn-rekap { background: linear-gradient(135deg,#2ecc71,#27ae60); color: white; border: none; padding: 9px 18px; border-radius: 999px; font-weight: bold; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 12px rgba(46,204,113,.35); transition: transform .15s; }
         .btn-rekap:hover { transform: translateY(-2px); }
+        .btn-info-mini { padding: 6px 10px; border: 1px solid #c8e6c9; border-radius: 5px; background: #f0fdf4; cursor: pointer; font-size: 0.8rem; color: #27ae60; transition: all .15s; }
+        .btn-info-mini:hover { background: #d1fae5; }
         .ug-filters { display: flex; gap: 8px; background: white; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; }
         .filter-group { flex: 1; }
         .filter-group label { display: block; font-size: 0.75rem; color: #475569; font-weight: 700; margin-bottom: 3px; }

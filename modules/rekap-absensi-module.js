@@ -12,10 +12,10 @@
  *  Tidak ada agregasi/ringkasan, tidak ada fitur export/cetak.
  */
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-import { supabaseUrl, supabaseKey } from '../assets/js/config.js';
+import { supabase } from '../assets/js/config.js';
+import { escapeHtml } from '../assets/js/utils.js';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Client Supabase singleton dibagikan dari config.js
 
 // [UX] Kunci penyimpanan pilihan filter terakhir,
 // agar tidak perlu memilih ulang Tahun Ajaran -> Semester -> Kelas setiap buka modul.
@@ -515,12 +515,7 @@ function fmtDateLong(d) {
     return dt.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-function escapeHtml(v) {
-    return String(v ?? '').replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
-}
-
+// escapeHtml kini diimpor bersama dari assets/js/utils.js (sumber tunggal anti-XSS)
 function showSection(id) {
     ['rk-section-absensi', 'rk-section-materi'].forEach(sid => {
         const el = document.getElementById(sid);
@@ -613,11 +608,11 @@ function injectStyles() {
         .rk-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
         .rk-title-area { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .rk-top h2 { margin: 0; font-size: 1.25rem; color: #0f172a; font-weight: 800; }
-        .rk-active-term-badge { background: #e0f2fe; color: #0284c7; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+        .rk-active-term-badge { background: #d1fae5; color: #047857; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
         .rk-btn { border: none; border-radius: 10px; padding: 8px 16px; font-size: .8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; }
         .rk-btn-ghost { background: #f1f5f9; color: #334155; }
         .rk-btn-ghost:hover { background: #e2e8f0; }
-        .rk-btn-link { background: none; border: none; color: #3b82f6; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0 4px; }
+        .rk-btn-link { background: none; border: none; color: #27ae60; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0 4px; }
         
         .rk-filter-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
         .rk-field-class { flex: 2; min-width: 240px; }
@@ -629,7 +624,7 @@ function injectStyles() {
         .rk-input-period { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: .78rem; background: #f8fafc; outline: none; }
         
         .rk-header-main { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
-        .rk-school-title { font-family: 'Fredoka One', cursive; color: #3b82f6; margin: 0 0 4px 0; font-size: 1.25rem; }
+        .rk-school-title { font-family: 'Fredoka One', cursive; color: #27ae60; margin: 0 0 4px 0; font-size: 1.25rem; }
         .rk-meta { font-size: .9rem; font-weight: 700; color: #1e293b; }
         .rk-meta-sub { font-size: .78rem; color: #64748b; margin-top: 2px; }
         .rk-stats-badges { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -651,7 +646,7 @@ function injectStyles() {
         .rk-table th, .rk-table td { border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; padding: 8px 10px; text-align: center; }
         .rk-table th { background: #f8fafc; color: #334155; font-weight: 700; border-top: none; }
         .rk-session-header { min-width: 90px; }
-        .rk-session-num { display: block; font-size: 0.72rem; color: #3b82f6; font-weight: 800; }
+        .rk-session-num { display: block; font-size: 0.72rem; color: #27ae60; font-weight: 800; }
         .rk-session-date { display: block; font-size: 0.7rem; color: #64748b; font-weight: normal; margin-top: 1px; }
         
         /* Sticky columns */

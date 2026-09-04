@@ -1398,6 +1398,224 @@ button {
 .text-center { text-align: center; }
 .text-muted { color: var(--text-muted); }
 .mb-4 { margin-bottom: var(--space-4); }
+
+/* =========================================
+   14. HEADER, NAV & LOGIN MODAL
+   (Migrasi dari inline <style> index.html agar
+    konsisten dengan design tokens & theming hijau)
+   ========================================= */
+
+/* --- Auth Area (kanan header) --- */
+.nav-user-area {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.auth-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.auth-badge .auth-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+  color: var(--primary-hover);
+  text-align: right;
+  line-height: 1.3;
+}
+
+.auth-badge .auth-role {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* --- Tombol Login / Aksi (Premium Green) --- */
+.btn-login-trigger {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  color: var(--white);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-full);
+  font-weight: var(--font-bold);
+  font-size: var(--text-sm);
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--glow-primary);
+  transition: all var(--transition-base);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.btn-login-trigger:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--glow-primary-lg);
+}
+
+.btn-login-trigger:active {
+  transform: scale(0.96);
+}
+
+.btn-login-trigger:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-login-trigger.btn-danger {
+  background: linear-gradient(135deg, var(--accent-red), #c0392b);
+  box-shadow: 0 4px 20px rgba(231, 76, 60, 0.25);
+}
+
+/* --- Navigasi Pills (main-nav-pills) --- */
+.main-nav-pills {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-1) var(--space-4) var(--space-3);
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.main-nav-pills::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- Login Modal (Premium) --- */
+.login-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-backdrop);
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-4);
+  animation: modalFadeIn var(--transition-base);
+}
+
+.login-modal.active {
+  display: flex;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.login-box {
+  background: var(--white);
+  padding: var(--space-8);
+  border-radius: var(--radius-2xl);
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow-2xl);
+  border: 1px solid var(--gray-200);
+  animation: slideUpBounce 0.4s var(--transition-bounce);
+  position: relative;
+}
+
+.login-box-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.login-box-logo img {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
+}
+
+.login-box h2 {
+  font-family: var(--font-family-heading);
+  color: var(--primary-hover);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-2xl);
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.login-box-sub {
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-6);
+  line-height: 1.5;
+}
+
+.login-box .form-group {
+  margin-bottom: var(--space-4);
+}
+
+.login-box label {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-2);
+}
+
+.login-box input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  outline: none;
+  transition: all var(--transition-base);
+}
+
+.login-box input::placeholder {
+  color: var(--text-muted);
+}
+
+.login-box input:focus {
+  border-color: var(--primary);
+  box-shadow: var(--glow-primary);
+}
+
+.login-box .btn-login-trigger {
+  width: 100%;
+  justify-content: center;
+  padding: var(--space-3);
+  font-size: var(--text-base);
+}
+
+.btn-close-login {
+  width: 100%;
+  margin-top: var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-2);
+  transition: color var(--transition-fast);
+}
+
+.btn-close-login:hover {
+  color: var(--text-primary);
+}
+
+/* Main content min-height */
+#app-content {
+  min-height: 60vh;
+}
 .mt-4 { margin-top: var(--space-4); }
 
 /* Print Styles */

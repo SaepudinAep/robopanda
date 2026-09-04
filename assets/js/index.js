@@ -5,16 +5,13 @@
  * Format: Plain Text (Huawei T10s Optimized)
  */
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-import { supabaseUrl, supabaseKey } from './config.js';
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from './config.js';
+import { escapeHtml } from './utils.js';
 
 // --- 1. STATE MANAGEMENT ---
 let currentUser = null;
-// Ambil role asli dari localStorage jika ada (misal: super_admin), jika tidak default guest
 let userProfile = { 
-    role: localStorage.getItem('user_role') || 'guest' 
+    role: 'guest' 
 }; 
 let currentActiveModule = 'explorer-module';
 
@@ -25,40 +22,40 @@ const STATIC_MENUS = [
     { title: 'Tools', route: 'tools', icon_class: 'fa-solid fa-gamepad', allowed_roles: '["guest"]' }
 ];
 
+// Versi rilis statis untuk cache-busting modul.
+// Ganti angka ini HANYA saat rilis update agar browser bisa cache modul antar kunjungan.
+const APP_VERSION = '6.6';
+
 // --- 3. INISIALISASI ---
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("System: Starting with role ->", userProfile.role);
-
     // LANGKAH 1: RENDER LANGSUNG (Pakai Data Darurat)
     // Kita render dulu agar layar tidak blank.
     renderNavbar(STATIC_MENUS); 
-    
-    // LANGKAH 2: LOAD MODUL UTAMA
-    loadModule('explorer-module');
 
-    // LANGKAH 3: AMBIL MENU LIVE DARI DB (Update jika ada perubahan)
-    await fetchPublicMenus();
-
-    // LANGKAH 4: CEK SESI USER DI BACKGROUND
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session?.user) {
-        currentUser = session.user;
-        const { data: profile } = await supabase.from('user_profiles').select('*').eq('id', currentUser.id).single();
-        if (profile) {
-            userProfile = profile;
-            localStorage.setItem('user_role', profile.role); // Simpan role asli
-            
-            // Render ulang menu dengan role baru (Admin akan tetap melihat menu Guest + Menu Admin)
-            await fetchPublicMenus();
-            updateAuthUI(true);
+    // LANGKAH 2: VERIFIKASI SESI LANGSUNG DARI SUPABASE (Bukan dari localStorage)
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+            currentUser = session.user;
+            const { data: profile } = await supabase.from('user_profiles').select('*').eq('id', currentUser.id).single();
+            if (profile) {
+                userProfile = profile;
+            }
         }
-    } else {
-        localStorage.setItem('user_role', 'guest');
-        updateAuthUI(false);
+    } catch (err) {
+        console.error("Auth verification error:", err);
     }
 
+    // Bersihkan residu legacy jika pernah tersimpan di browser
+    localStorage.removeItem('user_role');
+
+    // LANGKAH 3: UPDATE UI & FETCH MENUS SESUAI PROFIL TERVERIFIKASI
+    updateAuthUI(!!currentUser);
+    await fetchPublicMenus();
     setupAuthListeners();
+
+    // LANGKAH 4: LOAD MODUL UTAMA DENGAN PROFIL YANG VALID
+    loadModule('explorer-module');
 });
 
 // --- 4. LOGIKA FILTER MENU (PERBAIKAN UTAMA) ---
@@ -104,12 +101,12 @@ function renderNavbar(menus) {
         return false;
     });
 
-    // Render HTML
+    // Render HTML (judul & route di-escape untuk cegah XSS dari data DB)
     nav.innerHTML = filtered.map(m => `
         <button class="tab-item ${currentActiveModule === m.route ? 'active' : ''}" 
-                id="btn-nav-${m.route}"
-                onclick="window.loadModule('${m.route}')">
-            <i class="${m.icon_class || ''}"></i> ${m.title}
+                id="btn-nav-${escapeHtml(m.route)}"
+                onclick="window.loadModule('${escapeHtml(m.route)}')">
+            <i class="${escapeHtml(m.icon_class || '')}"></i> ${escapeHtml(m.title)}
         </button>
     `).join('');
 }
@@ -123,7 +120,7 @@ async function loadModule(name) {
     contentArea.innerHTML = `<div style="text-align:center; padding:100px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i></div>`;
 
     try {
-        const module = await import(`../../modules/${name}.js?v=${Date.now()}`);
+        const module = await import(`../../modules/${name}.js?v=${APP_VERSION}`);
         contentArea.innerHTML = ''; 
 
         if (module.initExplorer) {
@@ -148,25 +145,25 @@ function updateAuthUI(isLoggedIn) {
 
     if (isLoggedIn) {
         authArea.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px;">
-                <div style="text-align:right">
-                    <div style="font-size:0.8rem; font-weight:bold; color:#3b82f6;">${userProfile.name || 'User'}</div>
-                    <div style="font-size:0.6rem; color:#64748b; text-transform:uppercase;">${userProfile.role}</div>
+            <div class="auth-badge">
+                <div>
+                    <div class="auth-name">${escapeHtml(userProfile.name || 'User')}</div>
+                    <div class="auth-role">${escapeHtml(userProfile.role)}</div>
                 </div>
-                <button id="btn-logout-action" class="btn-login-trigger" style="background:#ef4444;">Logout</button>
+                <button id="btn-logout-action" class="btn-login-trigger btn-danger">Logout</button>
             </div>`;
         
         document.getElementById('btn-logout-action').onclick = async () => {
             if(confirm("Yakin ingin keluar?")) {
                 await supabase.auth.signOut();
-                localStorage.setItem('user_role', 'guest'); // Reset ke guest
+                localStorage.removeItem('user_role');
                 window.location.reload(); 
             }
         };
     } else {
-        authArea.innerHTML = `<button class="btn-login-trigger" id="btn-show-login">Login Siswa</button>`;
+        authArea.innerHTML = `<button class="btn-login-trigger" id="btn-show-login"><i class="fa-solid fa-right-to-bracket"></i> Login Siswa</button>`;
         const btnShow = document.getElementById('btn-show-login');
-        if (btnShow) btnShow.onclick = () => document.getElementById('modal-login').style.display = 'flex';
+        if (btnShow) btnShow.onclick = () => document.getElementById('modal-login').classList.add('active');
     }
 }
 
@@ -179,13 +176,13 @@ async function handleLogin() {
     if (!email || !password) return alert("Lengkapi data!");
     
     btn.disabled = true;
-    btn.innerText = "Memproses...";
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
     
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { 
         alert(error.message); 
+        btn.innerHTML = 'Masuk Sekarang';
         btn.disabled = false; 
-        btn.innerText = "Masuk Sekarang";
     } else {
         window.location.reload(); 
     }
@@ -194,8 +191,31 @@ async function handleLogin() {
 function setupAuthListeners() {
     const btn = document.getElementById('btn-do-login');
     if (btn) btn.onclick = handleLogin;
+    // Supabase auth state change listener untuk sinkronisasi otomatis
+    supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+            currentUser = null;
+            userProfile = { role: 'guest' };
+            localStorage.removeItem('user_role');
+        }
+    });
     const close = document.getElementById('btn-close-login');
-    if (close) close.onclick = () => document.getElementById('modal-login').style.display = 'none';
+    if (close) close.onclick = () => document.getElementById('modal-login').classList.remove('active');
+
+    // Klik area gelap di luar modal untuk menutup (tidak menutup jika klik di dalam kotak)
+    const modal = document.getElementById('modal-login');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.remove('active');
+        });
+    }
+
+    // Tutup dengan tombol Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal && modal.classList.contains('active')) {
+            modal.classList.remove('active');
+        }
+    });
 }
 
 window.loadModule = loadModule;
