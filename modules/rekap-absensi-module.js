@@ -1,12 +1,27 @@
 /**
  * Project: Robopanda Client (Public/Student)
  * File: modules/rekap-absensi-module.js
- * Version: 2.0 - Rekap Absensi & Materi sebagai Modul Mandiri (Tab Navbar)
+ * Version: 2.2 - Mapping User Role disamakan persis dengan Gallery Module
  *
  * Description:
  *  Laporan absensi & materi/silabus terajarkan per kelas, mengikuti
  *  semester & tahun ajaran aktif. Kini berdiri sendiri sebagai tab navbar
  *  (dimuat via loadModule), tidak lagi dibuka dari dalam Gallery Module.
+ *
+ *  v2.2: Mapping user-role disamakan persis dengan Gallery Module:
+ *    - privileged (super_admin/teacher/pic) -> default konteks 'school'
+ *    - role lain -> 'private' hanya jika punya class_private_id tanpa class_id
+ *    - student: dropdown kelas & semester disembunyikan, langsung terkunci
+ *      ke kelas miliknya (class_id / class_private_id) + auto-load laporan.
+ *    - Kompatibilitas pemanggil: init(canvas, userProfile) ATAU
+ *      init(canvas, { userProfile, onBack, initialClassId }).
+ *  v2.1: Switcher konteks Sekolah | Private (mirip Gallery Module).
+ *  - Private memakai tabel: class_private, students_private, pertemuan_private,
+ *    materi_private, attendance_private (tanpa kolom `status` -> kehadiran
+ *    diturunkan dari adanya data penilaian: sikap/fokus/pemahaman/detail).
+ *  - Private tidak terikat Semester/Tahun Ajaran (filter periode disembunyikan).
+ *  - Semua daftar sesi & materi diurutkan TERBARU DULU (descending).
+
  *
  * Catatan: Hanya menampilkan data sesuai yang ada di database (read-only).
  *  Tidak ada agregasi/ringkasan, tidak ada fitur export/cetak.
@@ -27,6 +42,7 @@ const RK_LAST_FILTER_KEY = 'rekap_absensi_last_filter';
 // ---------------------------------------------------------------
 let app = {
     userProfile: null,      // profil dari user_profiles (role mapping)
+    activeCtx: 'school',    // konteks laporan aktif: 'school' | 'private'
     onBack: null,           // callback kembali (opsional; default ke Beranda)
     initialClassId: null,   // kelas awal yang diteruskan pemanggil jika ada
     activeClass: null,      // { id, name, jadwal, level, schoolName }
@@ -37,15 +53,88 @@ let app = {
 };
 
 // ---------------------------------------------------------------
+// 0. KONTEKS LAPORAN: SEKOLAH | PRIVATE (meniru Gallery Module)
+// ---------------------------------------------------------------
+function canSeeContext(ctx) {
+    const role = app.userProfile?.role;
+    if (ctx === 'school') {
+        return ['super_admin', 'teacher', 'pic'].includes(role) || !!app.userProfile?.class_id;
+    }
+    // private: hanya guru/admin, atau user yang terdaftar di kelas private
+    return ['super_admin', 'teacher'].includes(role) || !!app.userProfile?.class_private_id;
+}
+
+function renderContextSwitcher() {
+    const showSchool = canSeeContext('school');
+    const showPrivate = canSeeContext('private');
+    if (!showSchool && !showPrivate) return ''; // tamu/siswa tanpa akses -> tanpa switcher
+
+    const btn = (ctx, icon, label) =>
+        `<button type="button" class="rk-ctx-btn ${app.activeCtx === ctx ? 'active' : ''}" id="rk-ctx-${ctx}" data-ctx="${ctx}">
+            <i class="fa-solid ${icon}"></i> ${label}
+        </button>`;
+
+    return `<div class="rk-ctx-bar" id="rk-ctx-bar" role="tablist" aria-label="Konteks Laporan">
+        ${showSchool ? btn('school', 'fa-school', 'Sekolah') : ''}
+        ${showPrivate ? btn('private', 'fa-house-chimney-user', 'Private') : ''}
+    </div>`;
+}
+
+// Visibilitas filter mengikuti Gallery Module:
+// - Student: SEMUA filter disembunyikan (kelas terkunci ke miliknya, auto-load).
+// - Konteks private: Tahun Ajaran/Semester disembunyikan (kelas private
+//   tidak terikat semester).
+function updateFilterVisibility() {
+    const isStudent = app.userProfile?.role === 'student';
+    const pf = document.getElementById('rk-period-field');
+    const cf = document.getElementById('rk-class-field');
+    if (pf) pf.style.display = (app.activeCtx === 'private' || isStudent) ? 'none' : '';
+    if (cf) cf.style.display = isStudent ? 'none' : '';
+}
+
+async function switchContext(ctx) {
+    if (!canSeeContext(ctx) || app.activeCtx === ctx) return;
+    app.activeCtx = ctx;
+
+    document.querySelectorAll('.rk-ctx-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.ctx === ctx));
+    updateFilterVisibility();
+
+    const termLabel = document.getElementById('rk-active-term-label');
+    if (termLabel) {
+        if (ctx === 'private') termLabel.textContent = 'Program Private';
+        else if (termLabel.dataset.schoolTerm) termLabel.textContent = termLabel.dataset.schoolTerm;
+    }
+
+    hideReport();
+    await isiDropdownKelas();
+}
+
+// ---------------------------------------------------------------
 // 1. INITIALIZATION
 // ---------------------------------------------------------------
 export async function init(canvas, opts = {}) {
-    app.userProfile = opts.userProfile || { role: 'guest' };
+    // [MAPPING GALLERY] index.js memanggil module.init(contentArea, userProfile)
+    // dengan objek profil LANGSUNG (bukan dibungkus properti). Pemanggil lama
+    // mungkin masih mengirim { userProfile, onBack, initialClassId } -> dukung
+    // kedua bentuk agar mapping user tidak gagal (bug v2.1: selalu kebaca guest).
+    const profile = (opts && opts.userProfile !== undefined) ? opts.userProfile : opts;
+    app.userProfile = (profile && typeof profile.role === 'string') ? profile : { role: 'guest' };
     app.onBack = opts.onBack || null;
     app.initialClassId = opts.initialClassId || null;
     app.activeClass = null;
     app.pertemuanList = [];
     app.activeTab = 'absensi';
+
+    // [MAPPING GALLERY] Konteks awal persis seperti Gallery Module:
+    // - privileged (super_admin/teacher/pic) -> selalu 'school'
+    // - role lain -> 'private' hanya bila punya class_private_id tanpa class_id
+    const privilegedRoles = ['super_admin', 'teacher', 'pic'];
+    if (privilegedRoles.includes(app.userProfile.role)) {
+        app.activeCtx = 'school';
+    } else {
+        app.activeCtx = (app.userProfile.class_private_id && !app.userProfile.class_id) ? 'private' : 'school';
+    }
 
     injectStyles();
 
@@ -61,14 +150,15 @@ export async function init(canvas, opts = {}) {
 
             <!-- Filter Cepat: Langsung Pilih Kelas (Semester Aktif Terpilih Otomatis) -->
             <section class="rk-card rk-search">
+                ${renderContextSwitcher()}
                 <div class="rk-filter-row">
-                    <div class="rk-field rk-field-class">
+                    <div class="rk-field rk-field-class" id="rk-class-field">
                         <label><i class="fa-solid fa-chalkboard-user"></i> Pilih Kelas</label>
                         <select id="rk-class" class="rk-input">
                             <option value="" disabled selected>Memuat daftar kelas...</option>
                         </select>
                     </div>
-                    <div class="rk-field rk-field-period-toggle">
+                    <div class="rk-field rk-field-period-toggle" id="rk-period-field">
                         <label><i class="fa-solid fa-calendar-days"></i> Semester</label>
                         <div class="rk-period-box">
                             <select id="rk-semester" class="rk-input-period"></select>
@@ -126,6 +216,16 @@ export async function init(canvas, opts = {}) {
 // 2. SMART DATA LOADING (Auto-Active Term -> Fast Class List)
 // ---------------------------------------------------------------
 async function loadInitialTermsAndClasses() {
+    // Mode Private: tidak terikat Tahun Ajaran/Semester -> langsung daftar kelas private
+    if (app.activeCtx === 'private') {
+        updateFilterVisibility();
+        const termLabel = document.getElementById('rk-active-term-label');
+        if (termLabel) termLabel.textContent = 'Program Private';
+        await isiDropdownKelas();
+        if (app.userProfile.role !== 'student') await restoreLastFilter();
+        return;
+    }
+
     try {
         // 1. Ambil Tahun Ajaran
         const { data: years, error: yErr } = await supabase
@@ -164,10 +264,15 @@ async function loadInitialTermsAndClasses() {
         const termLabel = document.getElementById('rk-active-term-label');
         if (termLabel) {
             termLabel.textContent = `${activeYear.year} • ${activeSemester ? activeSemester.name : 'Semester'}`;
+            termLabel.dataset.schoolTerm = termLabel.textContent; // dipulihkan saat kembali dari konteks Private
         }
 
         // 3. Langsung isi daftar kelas untuk semester ini
+        updateFilterVisibility();
         await isiDropdownKelas();
+
+        // Student sudah auto-load ke kelasnya sendiri (tidak ada pilihan lain)
+        if (app.userProfile.role === 'student') return;
 
         // 4. Jika ada initialClassId dari Galeri atau tersimpan di localStorage, buka langsung
         if (app.initialClassId && hasOption(document.getElementById('rk-class'), app.initialClassId)) {
@@ -184,6 +289,13 @@ async function loadInitialTermsAndClasses() {
 }
 
 async function isiDropdownKelas() {
+    // [MAPPING GALLERY] Student tidak memilih kelas: langsung terkunci ke kelas
+    // miliknya sesuai konteks aktif (Gallery menyembunyikan filter lalu memakai
+    // userProfile.class_id / userProfile.class_private_id + auto-load).
+    if (app.userProfile.role === 'student') return isiDropdownKelasStudent();
+
+    if (app.activeCtx === 'private') return isiDropdownKelasPrivate();
+
     const sid = document.getElementById('rk-semester').value;
     const selClass = document.getElementById('rk-class');
     selClass.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>';
@@ -219,15 +331,92 @@ async function isiDropdownKelas() {
     hideReport();
 }
 
+async function isiDropdownKelasPrivate() {
+    const selClass = document.getElementById('rk-class');
+    selClass.innerHTML = '<option value="" disabled selected>Memuat daftar kelas...</option>';
+
+    let query = supabase
+        .from('class_private')
+        .select('id, name, level, group_private:group_id(owner, code)')
+        .order('name');
+
+    // PIC hanya melihat kelas private dari group-nya sendiri
+    if (app.userProfile.role === 'pic' && app.userProfile.group_id) {
+        query = query.eq('group_id', app.userProfile.group_id);
+    }
+
+    const { data, error } = await query;
+    if (error) return alert('Gagal memuat kelas private: ' + error.message);
+
+    if (!data || data.length === 0) {
+        selClass.innerHTML = '<option value="" disabled selected>Tidak ada kelas private</option>';
+        hideReport();
+        return;
+    }
+
+    // Label: nama kelas + nama owner group (orang tua/peserta) bila tersedia
+    selClass.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' +
+        data.map(c =>
+            `<option value="${c.id}" data-name="${escapeHtml(c.name || '')}" data-jadwal="" data-level="${escapeHtml(c.level || '')}" data-school="${escapeHtml(c.group_private?.owner || '')}">
+                ${escapeHtml(c.name || '(tanpa nama)')}${c.group_private?.owner ? ' (' + escapeHtml(c.group_private.owner) + ')' : ''}
+            </option>`
+        ).join('');
+
+    hideReport();
+}
+
+// [MAPPING GALLERY] Path student: kunci ke kelas milik profil & auto-load laporan.
+async function isiDropdownKelasStudent() {
+    const selClass = document.getElementById('rk-class');
+    const ctx = app.activeCtx;
+    const cid = (ctx === 'school') ? app.userProfile.class_id : app.userProfile.class_private_id;
+
+    if (!cid) {
+        selClass.innerHTML = '<option value="" disabled selected>Anda belum terdaftar di kelas</option>';
+        hideReport();
+        return;
+    }
+
+    // Ambil detail kelas untuk label header laporan
+    let opt = null;
+    if (ctx === 'school') {
+        const { data } = await supabase.from('classes')
+            .select('id, name, jadwal, level, schools(name)').eq('id', cid).maybeSingle();
+        if (data) opt = {
+            id: data.id, name: data.name || '', jadwal: data.jadwal || '',
+            level: data.level || '', school: data.schools?.name || '',
+            label: `${data.name || '(tanpa nama)'}${data.schools?.name ? ' (' + data.schools.name + ')' : ''}`
+        };
+    } else {
+        const { data } = await supabase.from('class_private')
+            .select('id, name, level, group_private:group_id(owner, code)').eq('id', cid).maybeSingle();
+        if (data) opt = {
+            id: data.id, name: data.name || '', jadwal: '',
+            level: data.level || '', school: data.group_private?.owner || '',
+            label: `${data.name || '(tanpa nama)'}${data.group_private?.owner ? ' (' + data.group_private.owner + ')' : ''}`
+        };
+    }
+
+    if (!opt) {
+        selClass.innerHTML = '<option value="" disabled selected>Kelas tidak ditemukan</option>';
+        hideReport();
+        return;
+    }
+
+    selClass.innerHTML = `<option value="${opt.id}" selected data-name="${escapeHtml(opt.name)}" data-jadwal="${escapeHtml(opt.jadwal)}" data-level="${escapeHtml(opt.level)}" data-school="${escapeHtml(opt.school)}">${escapeHtml(opt.label)}</option>`;
+    await handleLoadRekap();
+}
+
 // ---------------------------------------------------------------
 // 2b. REMEMBER FILTER & AUTO RESTORE
 // ---------------------------------------------------------------
 function saveLastFilter() {
     try {
         localStorage.setItem(RK_LAST_FILTER_KEY, JSON.stringify({
-            yearId: document.getElementById('rk-year').value,
-            semesterId: document.getElementById('rk-semester').value,
-            classId: document.getElementById('rk-class').value
+            ctx: app.activeCtx,
+            yearId: document.getElementById('rk-year')?.value || '',
+            semesterId: document.getElementById('rk-semester')?.value || '',
+            classId: document.getElementById('rk-class')?.value || ''
         }));
     } catch (_) { }
 }
@@ -240,6 +429,11 @@ async function restoreLastFilter() {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(RK_LAST_FILTER_KEY) || 'null'); } catch (_) { saved = null; }
     if (!saved) return;
+
+    // Pulihkan konteks Sekolah/Private terakhir (jika role masih berhak melihatnya)
+    if (saved.ctx && saved.ctx !== app.activeCtx && canSeeContext(saved.ctx)) {
+        await switchContext(saved.ctx);
+    }
 
     const selClass = document.getElementById('rk-class');
     if (saved.classId && hasOption(selClass, saved.classId)) {
@@ -279,24 +473,8 @@ async function handleLoadRekap() {
 }
 
 async function loadClassData() {
-    const [rStudents, rPert, rAtt] = await Promise.all([
-        supabase.from('students').select('id, name, grade').eq('class_id', app.activeClass.id).eq('is_active', true).order('grade').order('name'),
-        supabase.from('pertemuan_kelas').select('id, tanggal, materi(title, description, detail)').eq('class_id', app.activeClass.id).order('tanggal', { ascending: true }),
-        supabase.from('attendance').select('id, status, student_id, pertemuan_id, student:student_id(name, grade), pertemuan:pertemuan_id!inner(tanggal, materi:materi_id(title))').eq('pertemuan.class_id', app.activeClass.id)
-    ]);
-
-    if (rStudents.error) return alert('Gagal memuat siswa: ' + rStudents.error.message);
-    if (rPert.error) return alert('Gagal memuat pertemuan: ' + rPert.error.message);
-    if (rAtt.error) return alert('Gagal memuat absensi: ' + rAtt.error.message);
-
-    app.students = (rStudents.data || []).map(s => ({ id: s.id, name: s.name || '', grade: s.grade || '' }));
-    app.pertemuanList = (rPert.data || []).map(p => ({
-        id: p.id,
-        tanggal: p.tanggal,
-        judul: p.materi?.title || '(tanpa judul)',
-        uraian: (p.materi?.description || p.materi?.detail || '').trim()
-    }));
-    app.attendance = rAtt.data || [];
+    const ok = (app.activeCtx === 'private') ? await fetchPrivateData() : await fetchSchoolData();
+    if (!ok) return false;
 
     // Gabungkan siswa yang tercatat di absensi tapi belum ada di list aktif
     const seen = new Map(app.students.map(s => [s.id, s]));
@@ -310,8 +488,71 @@ async function loadClassData() {
         String(a.name).localeCompare(String(b.name))
     );
 
+    // [URUTAN TANGGAL] Wajib terbaru dulu (descending).
+    // Dijamin ulang di sisi client agar konsisten apapun hasil ordering DB.
+    app.pertemuanList.sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')));
+
     populateRange();
     updateStatsBadges();
+    return true;
+}
+
+// --- Konteks SEKOLAH: students / pertemuan_kelas / attendance (kolom `status`) ---
+async function fetchSchoolData() {
+    const [rStudents, rPert, rAtt] = await Promise.all([
+        supabase.from('students').select('id, name, grade').eq('class_id', app.activeClass.id).eq('is_active', true).order('grade').order('name'),
+        supabase.from('pertemuan_kelas').select('id, tanggal, materi(title, description, detail)').eq('class_id', app.activeClass.id).order('tanggal', { ascending: false }),
+        supabase.from('attendance').select('id, status, student_id, pertemuan_id, student:student_id(name, grade), pertemuan:pertemuan_id!inner(tanggal, materi:materi_id(title))').eq('pertemuan.class_id', app.activeClass.id)
+    ]);
+
+    if (rStudents.error) { alert('Gagal memuat siswa: ' + rStudents.error.message); return false; }
+    if (rPert.error) { alert('Gagal memuat pertemuan: ' + rPert.error.message); return false; }
+    if (rAtt.error) { alert('Gagal memuat absensi: ' + rAtt.error.message); return false; }
+
+    app.students = (rStudents.data || []).map(s => ({ id: s.id, name: s.name || '', grade: s.grade || '' }));
+    app.pertemuanList = (rPert.data || []).map(p => ({
+        id: p.id,
+        tanggal: p.tanggal,
+        judul: p.materi?.title || '(tanpa judul)',
+        uraian: (p.materi?.description || p.materi?.detail || '').trim()
+    }));
+    app.attendance = rAtt.data || [];
+    return true;
+}
+
+// --- Konteks PRIVATE: students_private / pertemuan_private / attendance_private ---
+// attendance_private TIDAK punya kolom `status`. Baris absensi private tersimpan
+// sebagai penilaian saat sesi berlangsung (sikap/fokus/pemahaman/detail), sehingga:
+//   ada data penilaian  -> Hadir ('1')
+//   baris ada tapi kosong -> Belum Dinilai (null)
+//   tidak ada baris      -> Belum Dinilai (null)
+// (Alpa tidak pernah muncul di mode private karena tidak ada field statusnya.)
+async function fetchPrivateData() {
+    const [rStudents, rPert, rAtt] = await Promise.all([
+        supabase.from('students_private').select('id, name').eq('class_id', app.activeClass.id).eq('is_active', true).order('name'),
+        supabase.from('pertemuan_private').select('id, tanggal, pertemuan_ke, materi_private:materi_id(judul, deskripsi, detail)').eq('class_id', app.activeClass.id).order('tanggal', { ascending: false }),
+        supabase.from('attendance_private').select('id, student_id, pertemuan_id, sikap, fokus, pemahaman, detail, student:student_id(name), pertemuan:pertemuan_id!inner(tanggal)').eq('pertemuan.class_id', app.activeClass.id)
+    ]);
+
+    if (rStudents.error) { alert('Gagal memuat siswa: ' + rStudents.error.message); return false; }
+    if (rPert.error) { alert('Gagal memuat pertemuan: ' + rPert.error.message); return false; }
+    if (rAtt.error) { alert('Gagal memuat absensi: ' + rAtt.error.message); return false; }
+
+    // Siswa private tidak punya kolom grade
+    app.students = (rStudents.data || []).map(s => ({ id: s.id, name: s.name || '', grade: '' }));
+    app.pertemuanList = (rPert.data || []).map(p => ({
+        id: p.id,
+        tanggal: p.tanggal,
+        judul: p.materi_private?.judul || '(tanpa judul)',
+        uraian: (p.materi_private?.deskripsi || p.materi_private?.detail || '').trim()
+    }));
+    app.attendance = (rAtt.data || []).map(r => ({
+        id: r.id,
+        student_id: r.student_id,
+        pertemuan_id: r.pertemuan_id,
+        student: r.student, // untuk penggabungan siswa yang tidak lagi aktif
+        status: (r.sikap != null || r.fokus != null || r.pemahaman != null || (r.detail && String(r.detail).trim())) ? '1' : null
+    }));
     return true;
 }
 
@@ -319,11 +560,13 @@ function fillReportHeader() {
     const yearOpt = document.getElementById('rk-year').selectedOptions[0];
     const semOpt = document.getElementById('rk-semester').selectedOptions[0];
 
-    document.getElementById('rk-school').textContent = app.activeClass.schoolName || 'Sekolah';
+    document.getElementById('rk-school').textContent = app.activeClass.schoolName ||
+        (app.activeCtx === 'private' ? 'Kelas Private' : 'Sekolah');
     document.getElementById('rk-meta-class').textContent =
         `Kelas ${app.activeClass.name}  ${app.activeClass.level ? '• Level: ' + app.activeClass.level : ''}  |  Jadwal: ${app.activeClass.jadwal || '-'}`;
-    document.getElementById('rk-meta-year').textContent =
-        `${yearOpt ? yearOpt.textContent : ''} • ${semOpt ? semOpt.textContent : ''}`;
+    document.getElementById('rk-meta-year').textContent = (app.activeCtx === 'private')
+        ? 'Program Private'
+        : `${yearOpt ? yearOpt.textContent : ''} • ${semOpt ? semOpt.textContent : ''}`;
 
     document.getElementById('rk-report-header').style.display = 'block';
     document.getElementById('rk-control').style.display = 'block';
@@ -535,6 +778,12 @@ function setupEvents() {
         else if (window.loadModule) window.loadModule('explorer-module');
     });
 
+    // Switcher konteks Sekolah | Private
+    ['school', 'private'].forEach(ctx => {
+        const btn = document.getElementById('rk-ctx-' + ctx);
+        if (btn) btn.addEventListener('click', () => switchContext(ctx));
+    });
+
     // Pilih kelas -> langsung muat tanpa tombol manual
     document.getElementById('rk-class').addEventListener('change', handleLoadRekap);
 
@@ -613,6 +862,13 @@ function injectStyles() {
         .rk-btn-ghost { background: #f1f5f9; color: #334155; }
         .rk-btn-ghost:hover { background: #e2e8f0; }
         .rk-btn-link { background: none; border: none; color: #27ae60; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0 4px; }
+
+        /* Switcher konteks Sekolah | Private (pola pills seperti Gallery) */
+        .rk-ctx-bar { display: inline-flex; gap: 6px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 4px; margin-bottom: 14px; width: max-content; }
+        .rk-ctx-btn { border: none; background: transparent; color: #64748b; font-size: .8rem; font-weight: 700; padding: 7px 20px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: all .15s; }
+        .rk-ctx-btn:hover { color: #27ae60; background: #ecfdf5; }
+        .rk-ctx-btn.active { color: #fff; background: #2ecc71; box-shadow: 0 2px 8px rgba(46,204,113,.35); }
+        .rk-ctx-btn.active:hover { color: #fff; background: #2ecc71; }
         
         .rk-filter-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
         .rk-field-class { flex: 2; min-width: 240px; }
