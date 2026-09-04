@@ -903,26 +903,8 @@ function renderPlanDetail() {
     const inti = rppLines(pick('kegiatan_inti'));
     const penutup = rppLines(pick('kegiatan_penutup'));
     const indikator = rppLines(pick('indikator_penilaian'));
-    const version = pick('version');
-    const versionNotes = pick('version_notes');
 
-    const lvlRef = levelsList.find(l => l.id === m.level_id);
-    const program = m.src === 'skl' ? 'Sekolah' : 'Private';
-    const idRow = (label, value) => `
-        <div class="kur-rpp-idrow">
-            <span class="kur-rpp-idlabel">${escapeHtml(label)}</span>
-            <span class="kur-rpp-idval">${value}</span>
-        </div>`;
-
-    const ident = `
-        ${idRow('Materi / Robot', escapeHtml(m.title))}
-        ${idRow('Program', `<span class="kur-dot ${m.src}"></span>${program}`)}
-        ${idRow('Level', escapeHtml(lvlRef ? (lvlRef.kode + (lvlRef.detail ? ' — ' + lvlRef.detail : '')) : '-'))}
-        ${idRow('Kit / Sub-Level', escapeHtml(m.kitName || '-'))}
-        ${idRow('Alokasi Waktu', escapeHtml(alokasi || '-'))}
-        ${idRow('Versi', escapeHtml(version ? (version + (versionNotes ? ' — ' + versionNotes : '')) : '-'))}`;
-
-    const rppSections = [
+const rppSections = [
         tujuan.length ? rppSection('Tujuan Pembelajaran', rppNumbered(tujuan)) : '',
         alat.length ? rppSection('Alat dan Bahan', rppNumbered(alat)) : '',
         (apersepsi.length || inti.length || penutup.length) ? rppSection('Langkah-Langkah Pembelajaran', `
@@ -936,14 +918,16 @@ function renderPlanDetail() {
         ${m.desc ? rppSection('Deskripsi Materi', `<div class="kur-pre">${escapeHtml(m.desc)}</div>`) : ''}
         ${detailText ? rppSection('Detail / Catatan Pembelajaran', `<div class="kur-pre">${escapeHtml(detailText)}</div>`) : ''}`;
 
-    return `
+        return `
         <div class="kur-rpp-doc">
             <div class="kur-rpp-doc-head">
+                <button class="kur-btn-print kur-print-doc-btn" data-action="kur-print" title="Cetak / Simpan PDF RPP">
+                    <i class="fa-solid fa-print"></i> Cetak RPP
+                </button>
                 <div class="kur-rpp-doc-label">Rencana Pelaksanaan Pembelajaran</div>
                 <h3>${escapeHtml(m.title)}</h3>
-                <p class="kur-rpp-doc-sub">Silabus &amp; Kurikulum Robopanda — Lesson Plan</p>
+                ${alokasi ? `<p class="kur-rpp-doc-durasi"><i class="fa-solid fa-clock"></i> Durasi: ${escapeHtml(alokasi)}</p>` : ''}
             </div>
-            <div class="kur-rpp-ident">${ident}</div>
             ${rppSections}
             ${freeSections}
             ${rppSection('Target Achievement',
@@ -1165,17 +1149,19 @@ function injectStyles() {
         .kur-detail-label i { color: #2ecc71; }
         .kur-pre { background: #f8fafc; border: 1px solid #f1f5f9; padding: 10px 12px; border-radius: 10px; font-size: .88rem; color: #334155; white-space: pre-wrap; line-height: 1.45; }
 
-        /* RPP (Lesson Plan) — Format Dokumen Akademik */
+                /* RPP (Lesson Plan) — Format Dokumen Akademik */
         .kur-rpp-doc { border-top: 1px solid #e2e8f0; margin-top: 16px; padding-top: 18px; counter-reset: rppsec; }
-        .kur-rpp-doc-head { text-align: center; border-bottom: 2px solid #2ecc71; padding-bottom: 14px; margin-bottom: 16px; }
+        .kur-rpp-doc-head { position: relative; border-bottom: 2px solid #2ecc71; padding-bottom: 14px; margin-bottom: 16px; }
         .kur-rpp-doc-label { font-weight: 800; letter-spacing: .14em; font-size: .7rem; color: #1e874b; text-transform: uppercase; }
         .kur-rpp-doc-head h3 { margin: 6px 0 2px; font-family: 'Fredoka One', cursive; font-size: 1.3rem; color: #1e293b; }
-        .kur-rpp-doc-sub { margin: 0; color: #64748b; font-size: .8rem; }
-        .kur-rpp-ident { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
-        .kur-rpp-idrow { display: grid; grid-template-columns: 170px 1fr; border-bottom: 1px solid #f1f5f9; }
-        .kur-rpp-idrow:last-child { border-bottom: none; }
-        .kur-rpp-idlabel { background: #f8fafc; padding: 8px 14px; font-size: .76rem; font-weight: 700; color: #64748b; display: flex; align-items: center; }
-        .kur-rpp-idval { padding: 8px 14px; font-size: .85rem; color: #1e293b; font-weight: 600; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+        .kur-rpp-doc-sub { /* deprecated */ }
+        .kur-rpp-doc-durasi { margin-top: 4px; font-size: .8rem; color: #64748b; }
+        .kur-rpp-ident { /* deprecated */ display: none; }
+        .kur-btn-print { background: #2d3436; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .78rem; font-weight: 600; line-height: 1; z-index: 2; }
+        .kur-btn-print i { margin-right: 4px; }
+        .kur-btn-print:hover { background: #0f1111; }
+        .kur-rpp-doc-head { display: block; }
+        .kur-print-doc-btn { position: absolute; top: 0; right: 0; }
         .kur-rpp-sec { margin-top: 20px; }
         .kur-rpp-sec-title { font-weight: 800; font-size: .95rem; color: #1e293b; margin-bottom: 8px; }
         .kur-rpp-sec-title::before { counter-increment: rppsec; content: counter(rppsec, upper-alpha) ". "; color: #1e874b; }
@@ -1211,12 +1197,16 @@ function injectStyles() {
             body { background: #fff !important; color: #000 !important; }
             .kur-header-actions, .kur-sticky-bar, .kur-tabs-lvl, .kur-syll-arrow { display: none !important; }
             .kur-syll-doc { border: none !important; box-shadow: none !important; padding: 0 !important; }
-            .kur-syll-kit-card { border: 1px solid #ccc !important; break-inside: avoid; }
+            .kur-syll-kit-card { border: 1px solid #ccc !important; break-inside: auto; }
             .kur-syll-kit-card.collapsed .kur-syll-kit-body { display: block !important; }
             .kur-syll-table th { background: #eee !important; color: #000 !important; }
             .kur-plan-list { display: none !important; }
             .kur-plan-detail { border: none !important; box-shadow: none !important; }
-            .kur-rpp-phase, .kur-rpp-sec { break-inside: avoid; }
+            .kur-rpp-sec { break-inside: auto; }
+            .kur-rpp-phase { break-inside: avoid; }
+            .kur-rpp-phase + .kur-rpp-phase { break-before: auto; }
+            .kur-print-doc-btn { display: none !important; }
+            @page { size: A4; margin: 1.5cm; }
         }
 
         /* Tablet: Lesson Plan satu kolom agar nyaman dibaca */
@@ -1232,9 +1222,9 @@ function injectStyles() {
             .kur-search-box { min-width: 100%; }
             .kur-syll-doc-header { flex-direction: column; align-items: flex-start; }
             .kur-syll-table th, .kur-syll-table td { padding: 8px 6px; font-size: .8rem; }
-            .kur-rpp-idrow { grid-template-columns: 1fr; }
-            .kur-rpp-idlabel { padding-bottom: 0; }
             .kur-rpp-doc-head h3 { font-size: 1.1rem; }
+            .kur-rpp-doc-head { padding-right: 90px; }
+            .kur-print-doc-btn { position: static; display: block; width: 100%; margin-top: 10px; }
         }
     `;
     document.head.appendChild(style);

@@ -32,9 +32,9 @@ export async function init(container, userProfile) {
 
 export async function initExplorer(container, userProfile) {
     currentUserProfile = userProfile || null;
-    // Sambutan personal jika sudah login
+    // Sambutan personal jika sudah login - TAMPILKAN NAMA LENGKAP
     const greetName = userProfile?.name
-        ? `, ${escapeHtml(userProfile.name.split(' ')[0])}`
+        ? `, ${escapeHtml(userProfile.name)}`
         : '';
     const greeting = userProfile?.name
         ? `Halo${greetName}! 👋`
@@ -118,59 +118,27 @@ function showSkeletons() {
 // =========================================
 
 async function loadInitialData() {
-    const { data: levels } = await supabase.from("levels").select("*").order("kode");
+    const { data: levels } = await supabase.from("levels").select("*");
+    
     let filteredLevels = levels || [];
-
-    // Filter level sesuai hak akses pengguna (sembunyikan level lain)
-    if (currentUserProfile && currentUserProfile.role !== 'super_admin' && currentUserProfile.role !== 'guest' && currentUserProfile.id) {
-        const allowedLvlIds = new Set();
-
-        // 1. PIC: hanya level dari kelas di sekolahnya
-        if (currentUserProfile.role === 'pic' && currentUserProfile.school_id) {
-            try {
-                const { data: schoolClasses } = await supabase.from('classes')
-                    .select('id, level')
-                    .eq('school_id', currentUserProfile.school_id);
-                (schoolClasses || []).forEach(c => {
-                    if (c.level) {
-                        const match = filteredLevels.find(l => l.kode?.toLowerCase() === c.level.toLowerCase());
-                        if (match) allowedLvlIds.add(match.id);
-                    }
-                });
-            } catch (err) {}
-        }
-        // 2. Guru: terikat pada level_id di profil
-        else if (currentUserProfile.role === 'teacher' && currentUserProfile.level_id) {
-            allowedLvlIds.add(currentUserProfile.level_id);
-        }
-        // 3. Siswa / user dengan kelas terhubung
-        else if (currentUserProfile.class_id || currentUserProfile.class_private_id) {
-            if (currentUserProfile.class_id) {
-                try {
-                    const { data: cls } = await supabase.from('classes').select('level').eq('id', currentUserProfile.class_id).single();
-                    if (cls?.level) {
-                        const match = filteredLevels.find(l => l.kode?.toLowerCase() === cls.level.toLowerCase());
-                        if (match) allowedLvlIds.add(match.id);
-                    }
-                } catch (err) {}
-            }
-            if (currentUserProfile.class_private_id) {
-                try {
-                    const { data: cp } = await supabase.from('class_private').select('level_id, level').eq('id', currentUserProfile.class_private_id).single();
-                    if (cp?.level_id) allowedLvlIds.add(cp.level_id);
-                    else if (cp?.level) {
-                        const match = filteredLevels.find(l => l.kode?.toLowerCase() === cp.level.toLowerCase());
-                        if (match) allowedLvlIds.add(match.id);
-                    }
-                } catch (err) {}
-            }
-        }
-
-        if (allowedLvlIds.size > 0) {
-            filteredLevels = filteredLevels.filter(l => allowedLvlIds.has(l.id));
-        }
-    }
-
+    
+    // 1. HAPUS SEMUA FILTERING BERDASARKAN ROLE (tampilkan semua level)
+    // Untuk Explorer, siswa boleh melihat SEMUA level (kecuali Terapi Wicara)
+    
+    // 2. SEMATKAN FILTER: HILANGKAN LEVEL "TERAPI WICARA"
+    filteredLevels = filteredLevels.filter(lvl => {
+        return lvl.kode && !lvl.kode.toLowerCase().includes("terapi wicara");
+    });
+    
+    // 3. SORT LEVEL: urut berdasarkan order_index (ascending), lalu kode (alfabetis)
+    //    sebagai fallback untuk level yang order_index-nya null/kosong.
+    filteredLevels.sort((a, b) => {
+        const oa = (a.order_index ?? Infinity);
+        const ob = (b.order_index ?? Infinity);
+        if (oa !== ob) return oa - ob;
+        return (a.kode ?? '').localeCompare(b.kode ?? '', 'id');
+    });
+    
     allLevels = filteredLevels;
     
     renderLevelTabs();
@@ -258,7 +226,9 @@ async function loadLiveMissions() {
         supabase.from("pertemuan_private").select("tanggal, materi:materi_id(id, judul, deskripsi, image_url, level_id, levels(kode))").order("tanggal", { ascending: false }).limit(10),
     ]);
     const combined = [...(resSekolah.data || []).map(i => standardizeData(i, "sekolah")), ...(resPrivate.data || []).map(i => standardizeData(i, "private"))]
-        .filter(Boolean).sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+        .filter(Boolean)
+        .filter(item => item.level_kode && !item.level_kode.toLowerCase().includes("terapi wicara"))
+        .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
     
     const unique = []; const map = new Map();
     for (const item of combined) { if (!map.has(item.id)) { map.set(item.id, true); unique.push(item); } }
@@ -325,6 +295,7 @@ function filterByLevel(kode, btn) {
     const allSections = document.querySelectorAll(".feed-section[id^='row-']");
 
     if (kode === "all") {
+        // Mode "Semua Level": Tampilkan SEMUA materi + live missions
         if (liveWrapper) liveWrapper.style.display = "block";
         allSections.forEach(s => {
             s.style.display = "block";
@@ -333,14 +304,33 @@ function filterByLevel(kode, btn) {
             if (list) { list.classList.add("horizontal-scroll"); list.classList.remove("grid-layout"); }
         });
     } else {
-        if (liveWrapper) liveWrapper.style.display = "none";
+        // Mode per-tab level: Tampilkan SEMUA level (tidak hide section lain), 
+        // tapi visual highlight level tersebut di search
+
+        // Live missions TETAP muncul untuk semua level
+        if (liveWrapper) liveWrapper.style.display = "block";
+
+        // Semua section tetap BLOCK (tidak ada yang disembunyikan)
         allSections.forEach(s => {
-            if (s.id === `row-${kode}`) {
-                s.style.display = "block";
-                s.classList.add("is-grid"); // matikan fade-edge di grid
-                const list = s.querySelector("[data-level-row]");
-                if (list) { list.classList.remove("horizontal-scroll"); list.classList.add("grid-layout"); }
-            } else { s.style.display = "none"; }
+            s.style.display = "block";
+            // Set layout sesuai level masing-masing section
+            const list = s.querySelector("[data-level-row]");
+            if (list) { 
+                list.classList.add("horizontal-scroll"); 
+                list.classList.remove("grid-layout"); 
+            }
+            s.classList.remove("is-grid");
+        });
+
+        // Filter cards di search berdasarkan level ini (hanya untuk UX)
+        const cards = document.querySelectorAll(".materi-card");
+        cards.forEach(card => {
+            const cardLevel = card.dataset.level?.toLowerCase();
+            if (cardLevel && cardLevel !== kode.toLowerCase()) {
+                card.style.display = "none";
+            } else {
+                card.style.display = "";
+            }
         });
     }
 }

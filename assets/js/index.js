@@ -253,4 +253,17 @@ function setupAuthListeners() {
     });
 }
 
+// --- Muat ulang halaman saat logo diklik (menggantikan onclick inline) ---
+(function initLogoReload() {
+    const logo = document.getElementById('logo-reload');
+    if (!logo) return;
+    logo.addEventListener('click', () => window.location.reload());
+    logo.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            window.location.reload();
+        }
+    });
+})();
+
 window.loadModule = loadModule;

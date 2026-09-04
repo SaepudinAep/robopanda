@@ -718,6 +718,17 @@ button {
   overflow: hidden;
 }
 
+.loading-placeholder-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-lg);
+}
+
 .skeleton-card {
   min-width: 280px;
   height: 420px;

@@ -4,9 +4,33 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Robopanda Robotic - Official Website</title>
+  
+  <!-- Meta Tags untuk SEO -->
+  <meta name="description" content="Platform edukasi robotik interaktif untuk anak-anak. Belajar merakit, program, dan bereksperimen dengan robot secara menyenangkan." />
+  <meta name="keywords" content="robotik, edukasi, anak, belajar, STEM, robotic curriculum" />
+  <meta name="author" content="Robopanda Robotic" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://robopanda-educasi.id/" />
+  <meta property="og:title" content="Robopanda Robotic - Official Website" />
+  <meta property="og:description" content="Platform edukasi robotik interaktif untuk anak-anak. Belajar merakit, program, dan bereksperimen dengan robot secara menyenangkan." />
+  <meta property="og:image" content="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" />
+  
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://robopanda-educasi.id/" />
+  <meta property="twitter:title" content="Robopanda Robotic - Official Website" />
+  <meta property="twitter:description" content="Platform edukasi robotik interaktif untuk anak-anak. Belajar merakit, program, dan bereksperimen dengan robot secara menyenangkan." />
+  <meta property="twitter:image" content="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" />
+  
+  <!-- Favicon (tambahkan file favicon.ico di root) -->
+  <link rel="icon" type="image/png" href="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png">
+  <link rel="apple-touch-icon" href="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png">
+  
   <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet" />
   
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-WCqy8R9WkXjQF5T3lLxMmPZzNwOqKvGvVQbSfDhC8c9aE1qY8uHkU3rJnFzN0pPZQ==" crossorigin="anonymous" referrerpolicy="no-referrer">
   
   <link rel="stylesheet" href="assets/css/style_explorer.css" />
 </head>
@@ -14,7 +38,7 @@
 
 <header class="explorer-header">
   <div class="header-top">
-    <div class="logo-area" onclick="window.location.reload()" role="button" tabindex="0" aria-label="Muat ulang halaman">
+    <div class="logo-area" id="logo-reload" role="button" tabindex="0" aria-label="Muat ulang halaman">
       <img src="https://res.cloudinary.com/dmm6avtxd/image/upload/Robopanda-Education_zwx0bm.png" alt="Logo Robopanda" class="main-logo" />
     </div>
     <div class="nav-user-area" id="auth-area"></div>
@@ -26,9 +50,7 @@
 </header>
 
   <main class="explorer-main" id="app-content">
-    <div style="text-align:center; padding: 50px;">
-        <div class="loading-placeholder"><i class="fa-solid fa-spinner fa-spin"></i> Menyiapkan petualangan robotik...</div>
-    </div>
+    <div id="loading-placeholder" class="loading-placeholder-container"><i class="fa-solid fa-spinner fa-spin"></i> Menyiapkan petualangan robotik...</div>
   </main>
 
   <div class="login-modal" id="modal-login" role="dialog" aria-modal="true" aria-labelledby="login-title">
