@@ -130,13 +130,13 @@ async function loadInitialData() {
         return lvl.kode && !lvl.kode.toLowerCase().includes("terapi wicara");
     });
     
-    // 3. SORT LEVEL: urut berdasarkan order_index (ascending), lalu kode (alfabetis)
-    //    sebagai fallback untuk level yang order_index-nya null/kosong.
+    // 3. SORT LEVEL: urut berdasarkan order_index DESCENDING (level tertinggi/paling baru di atas)
+    //    Misal: Robotic (2) → Kiddy (1) → Beginner (0). Level tanpa order_index (null) di bawah.
     filteredLevels.sort((a, b) => {
-        const oa = (a.order_index ?? Infinity);
-        const ob = (b.order_index ?? Infinity);
-        if (oa !== ob) return oa - ob;
-        return (a.kode ?? '').localeCompare(b.kode ?? '', 'id');
+        const oa = (a.order_index ?? -Infinity);
+        const ob = (b.order_index ?? -Infinity);
+        if (oa !== ob) return ob - oa;
+        return (b.kode ?? '').localeCompare(a.kode ?? '', 'id');
     });
     
     allLevels = filteredLevels;
