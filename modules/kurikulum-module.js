@@ -1,7 +1,8 @@
 /**
  * Project: Robopanda Client (Public)
  * File: modules/kurikulum-module.js
- * Version: 2.0 - Modul Silabus & Kurikulum Standar Akademik (READ-ONLY)
+ * Version: 2.4 - Modul Silabus & Kurikulum Standar Akademik (READ-ONLY)
+ *              + Header RPP ringkas (judul + durasi) & tombol cetak RPP
  *
  * Description:
  *  Silabus & Peta Pembelajaran Robopanda dalam 3 Tab utama:
@@ -94,7 +95,7 @@ export async function init(canvas, profileFromIndex) {
                 </div>
                 <div class="kur-header-actions">
                     <button class="kur-btn-print" data-action="kur-print" title="Cetak / Simpan PDF">
-                        <i class="fa-solid fa-print"></i> <span>Cetak Silabus</span>
+                        <i class="fa-solid fa-print"></i> <span id="kur-print-label">Cetak Silabus</span>
                     </button>
                 </div>
             </div>
@@ -227,6 +228,10 @@ function renderTabs() {
         <button class="kur-tab ${activeTab === t.id ? 'active' : ''}" data-action="kur-tab" data-tab="${t.id}">
             <i class="fa-solid ${t.icon}"></i> ${t.label}
         </button>`).join('');
+
+    // Sinkronkan label tombol cetak global dengan tab aktif
+    const printLabel = document.getElementById('kur-print-label');
+    if (printLabel) printLabel.textContent = activeTab === 'plan' ? 'Cetak RPP' : (activeTab === 'progress' ? 'Cetak Riwayat' : 'Cetak Silabus');
 }
 
 function loadingHTML() {
@@ -257,8 +262,8 @@ async function fetchCurriculum() {
     const [lv, sv, ms, mp, asx, ap] = await Promise.all([
         supabase.from('levels').select('id, kode, detail, order_index'),
         supabase.from('sub_levels').select('id, level_id, kode, name, kit_alat, description, is_active, order_index'),
-        supabase.from('materi').select('id, title, description, detail, level_id, sub_level_id, order_index, created_at'),
-        supabase.from('materi_private').select('id, judul, deskripsi, detail, level_id, sub_level_id, order_index, created_at'),
+        supabase.from('materi').select('id, title, description, detail, level_id, sub_level_id, order_index, created_at, alokasi_waktu, tujuan_pembelajaran, alat_bahan, kegiatan_apersepsi, kegiatan_inti, kegiatan_penutup, indikator_penilaian, version, version_notes'),
+        supabase.from('materi_private').select('id, judul, deskripsi, detail, level_id, sub_level_id, order_index, created_at, alokasi_waktu, tujuan_pembelajaran, alat_bahan, kegiatan_apersepsi, kegiatan_inti, kegiatan_penutup, indikator_penilaian, version, version_notes'),
         supabase.from('achievement_sekolah').select('id, main_achievement, sub_achievement, sub_level_id'),
         supabase.from('achievement_private').select('id, main_achievement, sub_achievement, sub_level_id, materi_id')
     ]);
@@ -552,7 +557,17 @@ function toItem(row, src) {
         desc: row.description || row.deskripsi || '',
         detail: row.detail || '',
         order_index: row.order_index,
-        created_at: row.created_at
+        created_at: row.created_at,
+        // Kolom RPP terstandar
+        alokasi_waktu: row.alokasi_waktu || '',
+        tujuan_pembelajaran: row.tujuan_pembelajaran || '',
+        alat_bahan: row.alat_bahan || '',
+        kegiatan_apersepsi: row.kegiatan_apersepsi || '',
+        kegiatan_inti: row.kegiatan_inti || '',
+        kegiatan_penutup: row.kegiatan_penutup || '',
+        indikator_penilaian: row.indikator_penilaian || '',
+        version: row.version || '',
+        version_notes: row.version_notes || ''
     };
 }
 
@@ -578,6 +593,8 @@ function getSortedLevels() {
 function getSortedSubs(levelId) {
     const real = subLevelsList
         .filter(s => s.level_id === levelId)
+        // Sembunyikan kit/sub-level yang tidak berisi satu pun materi (tidak berhubungan)
+        .filter(s => getSortedItems(s.id).length > 0)
         .map(s => ({ id: s.id, title: s.name || s.kode || '(tanpa nama)', order_index: s.order_index, created_at: '', _ref: s }))
         .sort(compareItems);
 
@@ -662,17 +679,13 @@ function renderSyllabusKitSection(sub, kitNum) {
     if (searchQuery) {
         items = items.filter(m =>
             m.title.toLowerCase().includes(searchQuery) ||
-            m.desc.toLowerCase().includes(searchQuery) ||
-            m.detail.toLowerCase().includes(searchQuery)
+            m.desc.toLowerCase().includes(searchQuery)
         );
     }
 
     const isCollapsed = !!collapsedKits[sub.id];
     const isPseudo = !!sub._pseudo;
     const ref = sub._ref || {};
-
-    const asek = (!isPseudo && ref.id) ? achSekolah.filter(a => a.sub_level_id === ref.id) : [];
-    const aprv = (!isPseudo && ref.id) ? achPrivate.filter(a => a.sub_level_id === ref.id) : [];
 
     return `
     <div class="kur-syll-kit-card ${isCollapsed ? 'collapsed' : ''}">
@@ -702,16 +715,12 @@ function renderSyllabusKitSection(sub, kitNum) {
                             <tr>
                                 <th style="width: 50px;">No</th>
                                 <th>Topik Pembelajaran / Robot</th>
-                                <th>Deskripsi &amp; Target Materi</th>
-                                <th>Capaian (Achievement)</th>
+                                <th>Deskripsi Singkat</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${items.map((item, iIdx) => {
-                                const itemAsek = achSekolah.filter(a => a.sub_level_id === item.sub_level_id);
-                                const itemAprv = achPrivate.filter(a => a.materi_id === item.id);
-                                const allAch = [...itemAsek, ...itemAprv];
-
+                                const ringkas = shortDesc(item.desc);
                                 return `
                                 <tr>
                                     <td class="text-center font-bold">${iIdx + 1}</td>
@@ -720,28 +729,13 @@ function renderSyllabusKitSection(sub, kitNum) {
                                         ${srcBadge(item.src)}
                                     </td>
                                     <td>
-                                        ${item.desc ? `<div class="kur-syll-desc">${escapeHtml(item.desc)}</div>` : ''}
-                                        ${item.detail ? `<div class="kur-syll-detail-small">${escapeHtml(item.detail)}</div>` : ''}
-                                    </td>
-                                    <td>
-                                        ${allAch.length === 0 ? `<span class="kur-text-muted">-</span>` : `
-                                            <ul class="kur-ach-list">
-                                                ${allAch.map(a => `<li><i class="fa-solid fa-circle-check"></i> <b>${escapeHtml(a.main_achievement || '')}</b> ${a.sub_achievement ? `<small>&rsaquo; ${escapeHtml(a.sub_achievement)}</small>` : ''}</li>`).join('')}
-                                            </ul>`}
+                                        ${ringkas ? `<div class="kur-syll-desc">${escapeHtml(ringkas)}</div>` : `<span class="kur-text-muted">-</span>`}
                                     </td>
                                 </tr>`;
                             }).join('')}
                         </tbody>
                     </table>
                 </div>`}
-
-            ${(!isPseudo && (asek.length + aprv.length) > 0) ? `
-            <div class="kur-syll-global-ach">
-                <div class="kur-ach-title"><i class="fa-solid fa-trophy"></i> Capaian Utama Modul Ini</div>
-                <div class="kur-ach-grid">
-                    ${[...asek.map(a => achRow(a, 'skl')), ...aprv.map(a => achRow(a, 'prv'))].join('')}
-                </div>
-            </div>` : ''}
         </div>`}
     </div>`;
 }
@@ -827,6 +821,61 @@ function renderPlan() {
         </div>`}`;
 }
 
+// --- Helper konten RPP terstandar (format dokumen akademik) ---
+function rppLines(txt) {
+    if (!txt) return [];
+    return String(txt)
+        .split(/\r?\n|;/)
+        .map(l => l.replace(/^\s*(?:[-*\u2022\u00b7]|\d+[.)]|[a-zA-Z][.)])\s*/, '').trim())
+        .filter(Boolean);
+}
+
+// Deteksi kolom `detail` yang berisi JSON RPP (data mesin) — bukan teks manusia.
+// JSON ini tidak boleh ditampilkan sebagai "Detail / Catatan Pembelajaran".
+function parseRppJson(detail) {
+    if (!detail) return null;
+    const s = String(detail).trim();
+    if (!s.startsWith('{')) return null;
+    try {
+        const obj = JSON.parse(s);
+        if (obj && typeof obj === 'object' && (obj.is_rpp === true || obj.tujuan_pembelajaran || obj.kegiatan_inti)) return obj;
+    } catch (e) { /* bukan JSON valid — perlakukan sebagai teks biasa */ }
+    return null;
+}
+
+// Ringkasan pendek untuk silabus (rapatkan whitespace + potong)
+const shortDesc = (t, n = 150) => {
+    const s = String(t || '').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    return s.length > n ? s.slice(0, n).trimEnd() + '…' : s;
+};
+
+function rppSection(title, bodyHTML) {
+    return `
+        <div class="kur-rpp-sec">
+            <div class="kur-rpp-sec-title">${title}</div>
+            ${bodyHTML}
+        </div>`;
+}
+
+function rppNumbered(lines) {
+    return `<ol class="kur-rpp-list">${lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ol>`;
+}
+
+function rppSteps(lines) {
+    return `<ol class="kur-rpp-steps">${lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ol>`;
+}
+
+function rppPhase(no, title, raw) {
+    const steps = rppLines(raw);
+    if (!steps.length) return '';
+    return `
+        <div class="kur-rpp-phase">
+            <div class="kur-rpp-phase-title">${no}. ${escapeHtml(title)}</div>
+            ${rppSteps(steps)}
+        </div>`;
+}
+
 function renderPlanDetail() {
     if (!planDetail) {
         return `<div class="kur-empty small"><i class="fa-solid fa-hand-pointer fa-2x"></i> Pilih salah satu robot di daftar sebelah kiri untuk melihat Lesson Plan secara rinci.</div>`;
@@ -836,52 +885,86 @@ function renderPlanDetail() {
     const asek = m.sub_level_id ? achSekolah.filter(a => a.sub_level_id === m.sub_level_id) : [];
     const aprv = achPrivate.filter(a => a.materi_id === m.id);
 
+    // --- Normalisasi konten RPP terstandar ---
+    // Kolom `detail` dapat berisi JSON RPP (is_rpp) — JANGAN ditampilkan sebagai
+    // teks "Detail / Catatan"; pakai sebagai fallback bila kolom khusus kosong.
+    const rppJson = parseRppJson(m.detail);
+    const detailText = rppJson ? '' : String(m.detail || '').trim();
+
+    const pick = (col) => {
+        const v = String(m[col] || '').trim();
+        return v ? v : String((rppJson && rppJson[col]) || '').trim();
+    };
+
+    const alokasi = pick('alokasi_waktu');
+    const tujuan = rppLines(pick('tujuan_pembelajaran'));
+    const alat = rppLines(pick('alat_bahan'));
+    const apersepsi = rppLines(pick('kegiatan_apersepsi'));
+    const inti = rppLines(pick('kegiatan_inti'));
+    const penutup = rppLines(pick('kegiatan_penutup'));
+    const indikator = rppLines(pick('indikator_penilaian'));
+    const version = pick('version');
+    const versionNotes = pick('version_notes');
+
+    const lvlRef = levelsList.find(l => l.id === m.level_id);
+    const program = m.src === 'skl' ? 'Sekolah' : 'Private';
+    const idRow = (label, value) => `
+        <div class="kur-rpp-idrow">
+            <span class="kur-rpp-idlabel">${escapeHtml(label)}</span>
+            <span class="kur-rpp-idval">${value}</span>
+        </div>`;
+
+    const ident = `
+        ${idRow('Materi / Robot', escapeHtml(m.title))}
+        ${idRow('Program', `<span class="kur-dot ${m.src}"></span>${program}`)}
+        ${idRow('Level', escapeHtml(lvlRef ? (lvlRef.kode + (lvlRef.detail ? ' — ' + lvlRef.detail : '')) : '-'))}
+        ${idRow('Kit / Sub-Level', escapeHtml(m.kitName || '-'))}
+        ${idRow('Alokasi Waktu', escapeHtml(alokasi || '-'))}
+        ${idRow('Versi', escapeHtml(version ? (version + (versionNotes ? ' — ' + versionNotes : '')) : '-'))}`;
+
+    const rppSections = [
+        tujuan.length ? rppSection('Tujuan Pembelajaran', rppNumbered(tujuan)) : '',
+        alat.length ? rppSection('Alat dan Bahan', rppNumbered(alat)) : '',
+        (apersepsi.length || inti.length || penutup.length) ? rppSection('Langkah-Langkah Pembelajaran', `
+            ${rppPhase('1', 'Pendahuluan (Apersepsi)', m.kegiatan_apersepsi)}
+            ${rppPhase('2', 'Kegiatan Inti', m.kegiatan_inti)}
+            ${rppPhase('3', 'Penutup', m.kegiatan_penutup)}`) : '',
+        indikator.length ? rppSection('Indikator Penilaian', rppNumbered(indikator)) : ''
+    ].join('');
+
+    const freeSections = `
+        ${m.desc ? rppSection('Deskripsi Materi', `<div class="kur-pre">${escapeHtml(m.desc)}</div>`) : ''}
+        ${detailText ? rppSection('Detail / Catatan Pembelajaran', `<div class="kur-pre">${escapeHtml(detailText)}</div>`) : ''}`;
+
     return `
-        <div class="kur-detail-head">
-            <h3><i class="fa-solid fa-robot"></i> ${escapeHtml(m.title)}</h3>
-            <div class="kur-detail-badges">
-                ${srcBadge(m.src)}
-                <span class="kur-kit"><i class="fa-solid fa-toolbox"></i> ${escapeHtml(m.kitName || '-')}</span>
+        <div class="kur-rpp-doc">
+            <div class="kur-rpp-doc-head">
+                <div class="kur-rpp-doc-label">Rencana Pelaksanaan Pembelajaran</div>
+                <h3>${escapeHtml(m.title)}</h3>
+                <p class="kur-rpp-doc-sub">Silabus &amp; Kurikulum Robopanda — Lesson Plan</p>
             </div>
-        </div>
-
-        <div class="kur-detail-sec">
-            <div class="kur-detail-label"><i class="fa-solid fa-file-lines"></i> Deskripsi &amp; Tujuan</div>
-            ${m.desc ? `<div class="kur-pre">${escapeHtml(m.desc)}</div>` : `<div class="kur-empty small">Belum ada deskripsi.</div>`}
-        </div>
-
-        ${m.detail ? `
-        <div class="kur-detail-sec">
-            <div class="kur-detail-label"><i class="fa-solid fa-list-check"></i> Detail Pembelajaran</div>
-            <div class="kur-pre">${escapeHtml(m.detail)}</div>
-        </div>` : ''}
-
-        <div class="kur-detail-sec">
-            <div class="kur-detail-label"><i class="fa-solid fa-trophy"></i> Target Achievement</div>
-            ${(asek.length + aprv.length) === 0
-                ? `<div class="kur-empty small">Belum ada achievement terdaftar.</div>`
-                : [
-                    ...asek.map(a => achRow(a, 'skl')),
-                    ...aprv.map(a => achRow(a, 'prv'))
-                ].join('')}
-        </div>
-
-        <div class="kur-detail-sec">
-            <div class="kur-detail-label"><i class="fa-solid fa-clock-rotate-left"></i> Riwayat Pertemuan</div>
-            ${planHistoryLoading
-                ? `<div class="kur-loading inline"><i class="fa-solid fa-circle-notch fa-spin"></i> Memuat riwayat...</div>`
-                : planHistoryError
-                    ? `<div class="kur-empty small">Gagal memuat riwayat.</div>`
-                    : planHistory.length === 0
-                        ? `<div class="kur-empty small">Belum pernah diajarkan pada kelas aktif.</div>`
-                        : `<div class="kur-history">${planHistory.map(h => `
-                            <div class="kur-history-row">
-                                <span class="kur-dot ${h.src}"></span>
-                                <span class="kur-history-date">${escapeHtml(fmtDate(h.tanggal))}</span>
-                                ${h.pertemuanKe ? `<span class="kur-badge num">Pertemuan ${escapeHtml(h.pertemuanKe)}</span>` : ''}
-                                <span class="kur-history-class"><i class="fa-solid fa-users"></i> ${escapeHtml(h.kelas)}</span>
-                                ${srcBadge(h.src)}
-                            </div>`).join('')}</div>`}
+            <div class="kur-rpp-ident">${ident}</div>
+            ${rppSections}
+            ${freeSections}
+            ${rppSection('Target Achievement',
+                (asek.length + aprv.length) === 0
+                    ? `<div class="kur-empty small">Belum ada achievement terdaftar.</div>`
+                    : [...asek.map(a => achRow(a, 'skl')), ...aprv.map(a => achRow(a, 'prv'))].join(''))}
+            ${rppSection('Riwayat Pertemuan',
+                planHistoryLoading
+                    ? `<div class="kur-loading inline"><i class="fa-solid fa-circle-notch fa-spin"></i> Memuat riwayat...</div>`
+                    : planHistoryError
+                        ? `<div class="kur-empty small">Gagal memuat riwayat.</div>`
+                        : planHistory.length === 0
+                            ? `<div class="kur-empty small">Belum pernah diajarkan pada kelas aktif.</div>`
+                            : `<div class="kur-history">${planHistory.map(h => `
+                                <div class="kur-history-row">
+                                    <span class="kur-dot ${h.src}"></span>
+                                    <span class="kur-history-date">${escapeHtml(fmtDate(h.tanggal))}</span>
+                                    ${h.pertemuanKe ? `<span class="kur-badge num">Pertemuan ${escapeHtml(h.pertemuanKe)}</span>` : ''}
+                                    <span class="kur-history-class"><i class="fa-solid fa-users"></i> ${escapeHtml(h.kelas)}</span>
+                                    ${srcBadge(h.src)}
+                                </div>`).join('')}</div>`)}
         </div>`;
 }
 
@@ -1040,15 +1123,6 @@ function injectStyles() {
         .kur-syll-table tr:hover td { background: #f8fafc; }
         .kur-syll-materi-title { font-weight: 700; color: #1e293b; font-size: .92rem; margin-bottom: 4px; }
         .kur-syll-desc { color: #475569; font-size: .84rem; line-height: 1.4; }
-        .kur-syll-detail-small { color: #64748b; font-size: .78rem; margin-top: 4px; background: #f8fafc; padding: 4px 8px; border-radius: 6px; }
-
-        .kur-ach-list { list-style: none; margin: 0; padding: 0; }
-        .kur-ach-list li { font-size: .8rem; color: #047857; margin-bottom: 4px; display: flex; align-items: flex-start; gap: 6px; }
-        .kur-ach-list li i { color: #2ecc71; margin-top: 3px; font-size: .75rem; }
-
-        .kur-syll-global-ach { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 12px; margin-top: 12px; }
-        .kur-ach-title { font-size: .78rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
-        .kur-ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
 
         .kur-kit { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
         .kur-kit.warn { background: #fffbeb; color: #b45309; border-color: #fcd34d; }
@@ -1070,8 +1144,8 @@ function injectStyles() {
         .font-bold { font-weight: 700; }
 
         /* Lesson Plan View */
-        .kur-plan-wrap { display: grid; grid-template-columns: 1fr 1.3fr; gap: 16px; align-items: start; }
-        .kur-plan-list { list-style: none; margin: 0; padding: 0; max-height: 600px; overflow-y: auto; padding-right: 4px; }
+        .kur-plan-wrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+        .kur-plan-list { list-style: none; margin: 0; padding: 0; max-height: calc(100vh - 140px); overflow-y: auto; padding-right: 4px; position: sticky; top: 90px; }
         .kur-plan-row { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: .15s; }
         .kur-plan-row:hover { border-color: #a7f3d0; background: #f6fef9; }
         .kur-plan-row.selected { border-color: #1e874b; background: #ecfdf5; box-shadow: 0 2px 8px rgba(30,135,75,.15); }
@@ -1081,7 +1155,7 @@ function injectStyles() {
         .kur-plan-title { font-weight: 700; color: #1e293b; font-size: .9rem; }
         .kur-plan-kit { color: #64748b; font-size: .78rem; }
 
-        .kur-plan-detail { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,.03); }
+        .kur-plan-detail { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,.03); }
         .kur-detail-head { border-bottom: 2px solid #2ecc71; padding-bottom: 12px; margin-bottom: 16px; }
         .kur-detail-head h3 { margin: 0 0 6px; font-family: 'Fredoka One', cursive; color: #1e293b; font-size: 1.2rem; }
         .kur-detail-badges { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1090,6 +1164,31 @@ function injectStyles() {
         .kur-detail-label { font-size: .8rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
         .kur-detail-label i { color: #2ecc71; }
         .kur-pre { background: #f8fafc; border: 1px solid #f1f5f9; padding: 10px 12px; border-radius: 10px; font-size: .88rem; color: #334155; white-space: pre-wrap; line-height: 1.45; }
+
+        /* RPP (Lesson Plan) — Format Dokumen Akademik */
+        .kur-rpp-doc { border-top: 1px solid #e2e8f0; margin-top: 16px; padding-top: 18px; counter-reset: rppsec; }
+        .kur-rpp-doc-head { text-align: center; border-bottom: 2px solid #2ecc71; padding-bottom: 14px; margin-bottom: 16px; }
+        .kur-rpp-doc-label { font-weight: 800; letter-spacing: .14em; font-size: .7rem; color: #1e874b; text-transform: uppercase; }
+        .kur-rpp-doc-head h3 { margin: 6px 0 2px; font-family: 'Fredoka One', cursive; font-size: 1.3rem; color: #1e293b; }
+        .kur-rpp-doc-sub { margin: 0; color: #64748b; font-size: .8rem; }
+        .kur-rpp-ident { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+        .kur-rpp-idrow { display: grid; grid-template-columns: 170px 1fr; border-bottom: 1px solid #f1f5f9; }
+        .kur-rpp-idrow:last-child { border-bottom: none; }
+        .kur-rpp-idlabel { background: #f8fafc; padding: 8px 14px; font-size: .76rem; font-weight: 700; color: #64748b; display: flex; align-items: center; }
+        .kur-rpp-idval { padding: 8px 14px; font-size: .85rem; color: #1e293b; font-weight: 600; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+        .kur-rpp-sec { margin-top: 20px; }
+        .kur-rpp-sec-title { font-weight: 800; font-size: .95rem; color: #1e293b; margin-bottom: 8px; }
+        .kur-rpp-sec-title::before { counter-increment: rppsec; content: counter(rppsec, upper-alpha) ". "; color: #1e874b; }
+        .kur-rpp-list { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+        .kur-rpp-list li { font-size: .87rem; color: #334155; line-height: 1.6; }
+        .kur-rpp-list li::marker { color: #1e874b; font-weight: 700; }
+        .kur-rpp-phase { margin: 0 0 14px; }
+        .kur-rpp-phase:last-child { margin-bottom: 0; }
+        .kur-rpp-phase-title { font-weight: 700; font-size: .88rem; color: #1e293b; margin-bottom: 6px; }
+        .kur-rpp-steps { margin: 0; padding-left: 26px; display: grid; gap: 5px; list-style-type: lower-alpha; }
+        .kur-rpp-steps li { font-size: .85rem; color: #475569; line-height: 1.6; }
+        .kur-rpp-steps li::marker { color: #64748b; font-weight: 700; }
+        .kur-rpp-note { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 10px 14px; font-size: .8rem; line-height: 1.5; margin-top: 16px; }
 
         .kur-history { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
         .kur-history-row { display: flex; align-items: center; gap: 8px; font-size: .82rem; padding: 6px 10px; background: #f8fafc; border-radius: 8px; }
@@ -1115,6 +1214,15 @@ function injectStyles() {
             .kur-syll-kit-card { border: 1px solid #ccc !important; break-inside: avoid; }
             .kur-syll-kit-card.collapsed .kur-syll-kit-body { display: block !important; }
             .kur-syll-table th { background: #eee !important; color: #000 !important; }
+            .kur-plan-list { display: none !important; }
+            .kur-plan-detail { border: none !important; box-shadow: none !important; }
+            .kur-rpp-phase, .kur-rpp-sec { break-inside: avoid; }
+        }
+
+        /* Tablet: Lesson Plan satu kolom agar nyaman dibaca */
+        @media (max-width: 1024px) {
+            .kur-plan-wrap { grid-template-columns: 1fr; }
+            .kur-plan-list { position: static; max-height: 340px; }
         }
 
         /* Mobile Responsive */
@@ -1124,6 +1232,9 @@ function injectStyles() {
             .kur-search-box { min-width: 100%; }
             .kur-syll-doc-header { flex-direction: column; align-items: flex-start; }
             .kur-syll-table th, .kur-syll-table td { padding: 8px 6px; font-size: .8rem; }
+            .kur-rpp-idrow { grid-template-columns: 1fr; }
+            .kur-rpp-idlabel { padding-bottom: 0; }
+            .kur-rpp-doc-head h3 { font-size: 1.1rem; }
         }
     `;
     document.head.appendChild(style);
