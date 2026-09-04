@@ -49,9 +49,11 @@ let planHistoryError = false;
 let progressRows = null;
 let progressLoading = false;
 
-// Access control
-let showSchool = true;
+// Access control & Strict Scope State
+let showSchool = false;
 let showPrivate = false;
+let userAllowedLevelIds = null; // Set atau null (null = super_admin, semua level)
+let userAllowedClassIds = null; // Set atau null (filter pertemuan per kelas)
 
 // ==========================================
 // 2. INITIALIZATION
@@ -61,30 +63,34 @@ export async function init(canvas, profileFromIndex) {
     injectStyles();
 
     const role = userProfile.role || 'guest';
-    const canSeeSchoolCtx = ['super_admin', 'teacher', 'pic'].includes(role) || !!userProfile.class_id;
-    const canSeePrivateCtx = ['super_admin', 'teacher'].includes(role) || !!userProfile.class_private_id;
-
-    showPrivate = canSeePrivateCtx;
-    showSchool = canSeeSchoolCtx || (!canSeePrivateCtx && !userProfile.class_private_id);
-
-    if (!showSchool && !showPrivate) {
+    // Tamu tanpa login tidak boleh melihat silabus kelas internal
+    if (role === 'guest' || !userProfile.id) {
         canvas.innerHTML = `
             <div class="kur-container">
-                <div class="kur-empty"><i class="fa-solid fa-lock"></i> Silakan login untuk melihat kurikulum.</div>
+                <div class="kur-header">
+                    <div class="kur-header-text">
+                        <h2><i class="fa-solid fa-graduation-cap"></i> Silabus &amp; Kurikulum Robopanda</h2>
+                        <p>Silabus terstruktur dan rencana pembelajaran siswa.</p>
+                    </div>
+                </div>
+                <div class="kur-empty">
+                    <i class="fa-solid fa-lock fa-3x" style="color:#2ecc71;"></i>
+                    <p style="font-weight:700; color:#1e293b; font-size:1.1rem; margin:10px 0 4px;">Akses Silabus Terkunci</p>
+                    <p style="color:#64748b; max-width:420px; margin:0 0 16px;">Silakan login dengan akun siswa, guru, atau sekolah Anda untuk melihat silabus resmi kelas Anda.</p>
+                    <button class="kur-btn-print" onclick="const m=document.getElementById('modal-login');if(m)m.classList.add('active');"><i class="fa-solid fa-right-to-bracket"></i> Login Sekarang</button>
+                </div>
             </div>`;
         return;
     }
 
-    const scopeLabel = showSchool && showPrivate
-        ? 'Kurikulum Sekolah &amp; Program Private'
-        : (showPrivate ? 'Program Private' : 'Kurikulum Sekolah');
+    const scopeLabel = 'Peta pembelajaran terstruktur, lesson plan, dan riwayat kelas.';
 
     canvas.innerHTML = `
         <div class="kur-container">
             <div class="kur-header">
                 <div class="kur-header-text">
                     <h2><i class="fa-solid fa-graduation-cap"></i> Silabus &amp; Kurikulum Robopanda</h2>
-                    <p>${scopeLabel} &bull; Peta pembelajaran terstruktur, lesson plan, dan riwayat kelas.</p>
+                    <p id="kur-scope-label">${scopeLabel}</p>
                 </div>
                 <div class="kur-header-actions">
                     <button class="kur-btn-print" data-action="kur-print" title="Cetak / Simpan PDF">
@@ -267,59 +273,181 @@ async function fetchCurriculum() {
     achSekolah = asx.data || [];
     achPrivate = ap.data || [];
 
-    if (!showPrivate) { materiPrivate = []; achPrivate = []; }
-    if (!showSchool) { materiSekolah = []; achSekolah = []; }
+    await resolveUserScope();
 }
 
+// -------------------------------------------------------------
+// RESOLVE USER SCOPE & LEVEL ISOLATION
+// -------------------------------------------------------------
+async function resolveUserScope() {
+    const role = userProfile?.role || 'guest';
+
+    // 1. SUPER ADMIN: Memiliki hak akses penuh ke seluruh level & program
+    if (role === 'super_admin') {
+        showSchool = true;
+        showPrivate = true;
+        userAllowedLevelIds = null;
+        userAllowedClassIds = null;
+        updateScopeLabelHeader('Kurikulum Sekolah & Program Private (Super Admin Full Access)');
+        return;
+    }
+
+    userAllowedLevelIds = new Set();
+    userAllowedClassIds = new Set();
+
+    // 2. PIC SEKOLAH: Hanya level & kelas yang terdaftar di sekolah miliknya
+    if (role === 'pic' && userProfile.school_id) {
+        showSchool = true;
+        showPrivate = false;
+
+        try {
+            const { data: schoolClasses } = await supabase.from('classes')
+                .select('id, name, level, sub_level_id')
+                .eq('school_id', userProfile.school_id);
+
+            (schoolClasses || []).forEach(c => {
+                userAllowedClassIds.add(c.id);
+                if (c.level) {
+                    const match = levelsList.find(l => l.kode?.toLowerCase() === c.level.toLowerCase());
+                    if (match) userAllowedLevelIds.add(match.id);
+                }
+                if (c.sub_level_id) {
+                    const subObj = subLevelsList.find(s => s.id === c.sub_level_id);
+                    if (subObj?.level_id) userAllowedLevelIds.add(subObj.level_id);
+                }
+            });
+        } catch (err) {
+            console.error('[Kurikulum] Gagal memuat kelas sekolah PIC:', err);
+        }
+    }
+
+    // 3. GURU (TEACHER): Terikat pada level_id di profil
+    else if (role === 'teacher') {
+        if (userProfile.level_id) {
+            userAllowedLevelIds.add(userProfile.level_id);
+            const lvlObj = levelsList.find(l => l.id === userProfile.level_id);
+            if (lvlObj?.kode === 'Terapi Wicara') {
+                showSchool = false;
+                showPrivate = true;
+            } else if (lvlObj?.kode === 'Kiddy' || lvlObj?.kode === 'Beginner') {
+                showSchool = true;
+                showPrivate = false;
+            } else {
+                showSchool = true;
+                showPrivate = true;
+            }
+        } else {
+            showSchool = true;
+            showPrivate = true;
+        }
+    }
+
+    // 4. SISWA / AKUN KELAS TERIKAT
+    else if (userProfile.class_id || userProfile.class_private_id) {
+        if (userProfile.class_id) {
+            showSchool = true;
+            showPrivate = false;
+            userAllowedClassIds.add(userProfile.class_id);
+            try {
+                const { data: cls } = await supabase.from('classes')
+                    .select('id, level, sub_level_id')
+                    .eq('id', userProfile.class_id)
+                    .single();
+                if (cls?.level) {
+                    const match = levelsList.find(l => l.kode?.toLowerCase() === cls.level.toLowerCase());
+                    if (match) userAllowedLevelIds.add(match.id);
+                }
+                if (cls?.sub_level_id) {
+                    const subObj = subLevelsList.find(s => s.id === cls.sub_level_id);
+                    if (subObj?.level_id) userAllowedLevelIds.add(subObj.level_id);
+                }
+            } catch (e) {}
+        }
+        if (userProfile.class_private_id) {
+            showSchool = false;
+            showPrivate = true;
+            userAllowedClassIds.add(userProfile.class_private_id);
+            try {
+                const { data: cp } = await supabase.from('class_private')
+                    .select('id, level, level_id, sub_level_id')
+                    .eq('id', userProfile.class_private_id)
+                    .single();
+                if (cp?.level_id) userAllowedLevelIds.add(cp.level_id);
+                else if (cp?.level) {
+                    const match = levelsList.find(l => l.kode?.toLowerCase() === cp.level.toLowerCase());
+                    if (match) userAllowedLevelIds.add(match.id);
+                }
+            } catch (e) {}
+        }
+    }
+
+    // 5. PENYARINGAN KETAT: Level & Materi Lain Sembunyi Sepenuhnya
+    if (userAllowedLevelIds && userAllowedLevelIds.size > 0) {
+        levelsList = levelsList.filter(l => userAllowedLevelIds.has(l.id));
+        subLevelsList = subLevelsList.filter(s => userAllowedLevelIds.has(s.level_id));
+        materiSekolah = materiSekolah.filter(m => userAllowedLevelIds.has(m.level_id));
+        materiPrivate = materiPrivate.filter(m => userAllowedLevelIds.has(m.level_id));
+        achSekolah = achSekolah.filter(a => userAllowedLevelIds.has(a.level_id) || subLevelsList.some(s => s.id === a.sub_level_id));
+        achPrivate = achPrivate.filter(a => userAllowedLevelIds.has(a.level_id) || subLevelsList.some(s => s.id === a.sub_level_id));
+    }
+
+    if (!showPrivate) { materiPrivate = []; achPrivate = []; }
+    if (!showSchool) { materiSekolah = []; achSekolah = []; }
+
+    const activeLevelsStr = levelsList.map(l => l.kode).join(', ') || 'Kelas Anda';
+    updateScopeLabelHeader(`Silabus Khusus: ${activeLevelsStr} &bull; Peta pembelajaran terstruktur kelas Anda.`);
+}
+
+function updateScopeLabelHeader(text) {
+    const lbl = document.getElementById('kur-scope-label');
+    if (lbl) lbl.innerHTML = text;
+}
+
+// -------------------------------------------------------------
+// PROGRESS & RIWAYAT (HANYA KELAS/LEVEL YANG DIIZINKAN)
+// -------------------------------------------------------------
 async function loadProgress() {
     progressLoading = true;
     renderProgress();
 
-    const isPrivileged = ['super_admin', 'teacher', 'pic'].includes(userProfile.role);
+    const isSuperAdmin = userProfile?.role === 'super_admin';
 
     let schoolPromise = Promise.resolve({ data: [] });
     if (showSchool) {
-        if (isPrivileged) {
-            schoolPromise = supabase.from('pertemuan_kelas')
-                .select('tanggal, materi:materi_id(id, title, level_id, levels(kode)), kelas:class_id(name)')
-                .order('tanggal', { ascending: false })
-                .order('created_at', { ascending: false })
-                .limit(40);
-        } else if (userProfile.class_id) {
-            schoolPromise = supabase.from('pertemuan_kelas')
-                .select('tanggal, materi:materi_id(id, title, level_id, levels(kode)), kelas:class_id(name)')
-                .eq('class_id', userProfile.class_id)
-                .order('tanggal', { ascending: false })
-                .order('created_at', { ascending: false })
-                .limit(40);
+        let q = supabase.from('pertemuan_kelas')
+            .select('tanggal, class_id, materi:materi_id(id, title, level_id, levels(kode)), kelas:class_id(name)')
+            .order('tanggal', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(60);
+
+        if (!isSuperAdmin && userAllowedClassIds && userAllowedClassIds.size > 0) {
+            q = q.in('class_id', Array.from(userAllowedClassIds));
         }
+        schoolPromise = q;
     }
 
     let privatePromise = Promise.resolve({ data: [] });
     if (showPrivate) {
-        if (isPrivileged) {
-            privatePromise = supabase.from('pertemuan_private')
-                .select('tanggal, pertemuan_ke, materi:materi_id(id, judul, level_id, levels(kode)), kelas:class_id(name)')
-                .order('tanggal', { ascending: false })
-                .order('created_at', { ascending: false })
-                .limit(40);
-        } else if (userProfile.class_private_id) {
-            privatePromise = supabase.from('pertemuan_private')
-                .select('tanggal, pertemuan_ke, materi:materi_id(id, judul, level_id, levels(kode)), kelas:class_id(name)')
-                .eq('class_id', userProfile.class_private_id)
-                .order('tanggal', { ascending: false })
-                .order('created_at', { ascending: false })
-                .limit(40);
+        let q = supabase.from('pertemuan_private')
+            .select('tanggal, class_id, pertemuan_ke, materi:materi_id(id, judul, level_id, levels(kode)), kelas:class_id(name)')
+            .order('tanggal', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(60);
+
+        if (!isSuperAdmin && userAllowedClassIds && userAllowedClassIds.size > 0) {
+            q = q.in('class_id', Array.from(userAllowedClassIds));
         }
+        privatePromise = q;
     }
 
     const [ps, pp] = await Promise.all([schoolPromise, privatePromise]);
 
-    const rows = [
+    let rows = [
         ...(ps.data || []).map(r => ({
             tanggal: r.tanggal,
             title: r.materi?.title || '',
             levelKode: r.materi?.levels?.kode || '',
+            levelId: r.materi?.level_id || '',
             kelas: r.kelas?.name || '-',
             pertemuanKe: null,
             src: 'skl'
@@ -328,11 +456,17 @@ async function loadProgress() {
             tanggal: r.tanggal,
             title: r.materi?.judul || '',
             levelKode: r.materi?.levels?.kode || '',
+            levelId: r.materi?.level_id || '',
             kelas: r.kelas?.name || '-',
             pertemuanKe: r.pertemuan_ke,
             src: 'prv'
         }))
     ].filter(r => r.title);
+
+    // Kunci Level: Pertemuan dari level lain yang tidak diizinkan disembunyikan
+    if (!isSuperAdmin && userAllowedLevelIds && userAllowedLevelIds.size > 0) {
+        rows = rows.filter(r => userAllowedLevelIds.has(r.levelId));
+    }
 
     rows.sort((a, b) =>
         String(b.tanggal || '').localeCompare(String(a.tanggal || '')) ||
@@ -344,43 +478,33 @@ async function loadProgress() {
 
 async function loadPlanHistory(item) {
     const key = item.src + ':' + item.id;
-    const isPrivileged = ['super_admin', 'teacher', 'pic'].includes(userProfile.role);
+    const isSuperAdmin = userProfile?.role === 'super_admin';
 
     try {
         let schoolPromise = Promise.resolve({ data: [] });
         if (item.src === 'skl' && showSchool) {
-            if (isPrivileged) {
-                schoolPromise = supabase.from('pertemuan_kelas')
-                    .select('tanggal, kelas:class_id(name)')
-                    .eq('materi_id', item.id)
-                    .order('tanggal', { ascending: false })
-                    .limit(50);
-            } else if (userProfile.class_id) {
-                schoolPromise = supabase.from('pertemuan_kelas')
-                    .select('tanggal, kelas:class_id(name)')
-                    .eq('materi_id', item.id)
-                    .eq('class_id', userProfile.class_id)
-                    .order('tanggal', { ascending: false })
-                    .limit(50);
+            let q = supabase.from('pertemuan_kelas')
+                .select('tanggal, class_id, kelas:class_id(name)')
+                .eq('materi_id', item.id)
+                .order('tanggal', { ascending: false })
+                .limit(50);
+            if (!isSuperAdmin && userAllowedClassIds && userAllowedClassIds.size > 0) {
+                q = q.in('class_id', Array.from(userAllowedClassIds));
             }
+            schoolPromise = q;
         }
 
         let privatePromise = Promise.resolve({ data: [] });
         if (item.src === 'prv' && showPrivate) {
-            if (isPrivileged) {
-                privatePromise = supabase.from('pertemuan_private')
-                    .select('tanggal, pertemuan_ke, kelas:class_id(name)')
-                    .eq('materi_id', item.id)
-                    .order('tanggal', { ascending: false })
-                    .limit(50);
-            } else if (userProfile.class_private_id) {
-                privatePromise = supabase.from('pertemuan_private')
-                    .select('tanggal, pertemuan_ke, kelas:class_id(name)')
-                    .eq('materi_id', item.id)
-                    .eq('class_id', userProfile.class_private_id)
-                    .order('tanggal', { ascending: false })
-                    .limit(50);
+            let q = supabase.from('pertemuan_private')
+                .select('tanggal, class_id, pertemuan_ke, kelas:class_id(name)')
+                .eq('materi_id', item.id)
+                .order('tanggal', { ascending: false })
+                .limit(50);
+            if (!isSuperAdmin && userAllowedClassIds && userAllowedClassIds.size > 0) {
+                q = q.in('class_id', Array.from(userAllowedClassIds));
             }
+            privatePromise = q;
         }
 
         const [ps, pp] = await Promise.all([schoolPromise, privatePromise]);

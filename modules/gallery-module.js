@@ -134,12 +134,27 @@ async function loadClassesOrGroups() {
         const col = currentContext === 'school' ? 'school_id' : 'group_id';
         const val = currentContext === 'school' ? userProfile.school_id : userProfile.group_id;
         query = query.eq(col, val);
+    } else if (userProfile.role === 'teacher' && userProfile.level_id) {
+        if (currentContext === 'private') {
+            query = query.eq('level_id', userProfile.level_id);
+        } else {
+            try {
+                const { data: lvlObj } = await supabase.from('levels').select('kode').eq('id', userProfile.level_id).single();
+                if (lvlObj?.kode) {
+                    query = query.eq('level', lvlObj.kode);
+                }
+            } catch (e) {}
+        }
     }
 
     const { data } = await query.order('name');
     if (data) {
-        classSelect.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
-            data.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.schools?.name ? ` (${escapeHtml(c.schools.name)})` : ''}</option>`).join('');
+        if (data.length === 0) {
+            classSelect.innerHTML = '<option value="" disabled selected>-- Tidak ada kelas untuk level/sekolah Anda --</option>';
+        } else {
+            classSelect.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
+                data.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.schools?.name ? ` (${escapeHtml(c.schools.name)})` : ''}</option>`).join('');
+        }
     }
 }
 

@@ -13,6 +13,7 @@ import { escapeHtml } from '../assets/js/utils.js';
 
 // --- State Management (Tetap Asli) ---
 let allLevels = [];
+let currentUserProfile = null;
 // Cache data kartu yang sudah dimuat. Dipakai saat membuka modal agar
 // deskripsi langsung muncul tanpa bergantung hasil query ulang yang bisa gagal.
 const cardsCache = new Map();
@@ -30,6 +31,7 @@ export async function init(container, userProfile) {
 }
 
 export async function initExplorer(container, userProfile) {
+    currentUserProfile = userProfile || null;
     // Sambutan personal jika sudah login
     const greetName = userProfile?.name
         ? `, ${escapeHtml(userProfile.name.split(' ')[0])}`
@@ -116,9 +118,60 @@ function showSkeletons() {
 // =========================================
 
 async function loadInitialData() {
-    // Variable 'supabase' sekarang sudah dikenali berkat fix di baris 12
     const { data: levels } = await supabase.from("levels").select("*").order("kode");
-    allLevels = levels || [];
+    let filteredLevels = levels || [];
+
+    // Filter level sesuai hak akses pengguna (sembunyikan level lain)
+    if (currentUserProfile && currentUserProfile.role !== 'super_admin' && currentUserProfile.role !== 'guest' && currentUserProfile.id) {
+        const allowedLvlIds = new Set();
+
+        // 1. PIC: hanya level dari kelas di sekolahnya
+        if (currentUserProfile.role === 'pic' && currentUserProfile.school_id) {
+            try {
+                const { data: schoolClasses } = await supabase.from('classes')
+                    .select('id, level')
+                    .eq('school_id', currentUserProfile.school_id);
+                (schoolClasses || []).forEach(c => {
+                    if (c.level) {
+                        const match = filteredLevels.find(l => l.kode?.toLowerCase() === c.level.toLowerCase());
+                        if (match) allowedLvlIds.add(match.id);
+                    }
+                });
+            } catch (err) {}
+        }
+        // 2. Guru: terikat pada level_id di profil
+        else if (currentUserProfile.role === 'teacher' && currentUserProfile.level_id) {
+            allowedLvlIds.add(currentUserProfile.level_id);
+        }
+        // 3. Siswa / user dengan kelas terhubung
+        else if (currentUserProfile.class_id || currentUserProfile.class_private_id) {
+            if (currentUserProfile.class_id) {
+                try {
+                    const { data: cls } = await supabase.from('classes').select('level').eq('id', currentUserProfile.class_id).single();
+                    if (cls?.level) {
+                        const match = filteredLevels.find(l => l.kode?.toLowerCase() === cls.level.toLowerCase());
+                        if (match) allowedLvlIds.add(match.id);
+                    }
+                } catch (err) {}
+            }
+            if (currentUserProfile.class_private_id) {
+                try {
+                    const { data: cp } = await supabase.from('class_private').select('level_id, level').eq('id', currentUserProfile.class_private_id).single();
+                    if (cp?.level_id) allowedLvlIds.add(cp.level_id);
+                    else if (cp?.level) {
+                        const match = filteredLevels.find(l => l.kode?.toLowerCase() === cp.level.toLowerCase());
+                        if (match) allowedLvlIds.add(match.id);
+                    }
+                } catch (err) {}
+            }
+        }
+
+        if (allowedLvlIds.size > 0) {
+            filteredLevels = filteredLevels.filter(l => allowedLvlIds.has(l.id));
+        }
+    }
+
+    allLevels = filteredLevels;
     
     renderLevelTabs();
     await loadLiveMissions();

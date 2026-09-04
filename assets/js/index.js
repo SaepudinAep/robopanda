@@ -26,7 +26,7 @@ const STATIC_MENUS = [
 
 // Versi rilis statis untuk cache-busting modul.
 // Ganti angka ini HANYA saat rilis update agar browser bisa cache modul antar kunjungan.
-const APP_VERSION = '7.1';
+const APP_VERSION = '7.2';
 
 // --- 3. INISIALISASI ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -83,13 +83,13 @@ async function fetchPublicMenus() {
                     allowed_roles: '["super_admin","teacher","pic"]'
                 });
             }
-            // Pastikan tab Kurikulum (read-only) selalu tampil untuk semua role.
+            // Pastikan tab Kurikulum (read-only) tampil sesuai role terdaftar.
             if (!allMenus.some(m => m.route === 'kurikulum-module')) {
                 allMenus.push({
                     title: 'Kurikulum',
                     route: 'kurikulum-module',
                     icon_class: 'fa-solid fa-sitemap',
-                    allowed_roles: '["guest"]'
+                    allowed_roles: '["super_admin","teacher","pic","student"]'
                 });
             }
             renderNavbar(allMenus);
