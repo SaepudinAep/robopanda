@@ -894,6 +894,15 @@ button {
   white-space: pre-line;
 }
 
+/* Deskripsi Robot di modal */
+.modal-description-text {
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-line;
+  margin: 0;
+}
+
 /* Tombol Close */
 .btn-close-modal {
   position: absolute;
@@ -1324,6 +1333,25 @@ button {
   font-size: var(--text-lg);
   line-height: 1.35;
 }
+
+/* Deskripsi singkat robot di kartu (max 2 baris) */
+.card-desc {
+  font-size: var(--text-sm) !important;
+  color: var(--text-secondary) !important;
+  line-height: 1.5 !important;
+  margin: 0 0 var(--space-2) !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(1.5em * 2); /* jaga tinggi kartu seragam */
+}
+
+.card-desc-empty {
+  color: var(--text-muted) !important;
+  font-style: italic;
+}
+
 .card-meta {
   display: flex;
   flex-wrap: wrap;

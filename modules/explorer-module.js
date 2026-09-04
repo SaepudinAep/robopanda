@@ -13,6 +13,9 @@ import { escapeHtml } from '../assets/js/utils.js';
 
 // --- State Management (Tetap Asli) ---
 let allLevels = [];
+// Cache data kartu yang sudah dimuat. Dipakai saat membuka modal agar
+// deskripsi langsung muncul tanpa bergantung hasil query ulang yang bisa gagal.
+const cardsCache = new Map();
 
 /**
  * 🎬 FUNGSI UTAMA (ENTRY POINT)
@@ -76,7 +79,7 @@ export async function initExplorer(container, userProfile) {
                     </div>
                 </div>
                 <div class="modal-body">
-                    <div class="content-block"><h3>Ringkasan Misi</h3><p id="modal-description"></p></div>
+                    <div class="content-block"><h3>Deskripsi Robot</h3><p id="modal-description" class="modal-description-text"></p></div>
                     <div class="content-block"><h3>Rencana Pembelajaran</h3><div id="modal-detail" class="detail-text"></div></div>
                     <div style="margin-top: 20px; text-align: center;">
                         <button id="btn-modal-to-gallery" class="btn-login-trigger" onclick="const m=document.getElementById('modal-explorer');if(m)m.classList.remove('active');document.body.style.overflow='';if(window.loadModule){window.loadModule('gallery-module');}">
@@ -152,6 +155,9 @@ function renderCards(items, containerId) {
         return;
     }
 
+    // Simpan data kartu untuk modal (deskripsi pasti tersedia saat klik)
+    items.forEach(it => { if (it?.id) cardsCache.set(it.id, it); });
+
     list.innerHTML = items.map(item => {
         const tgl = new Date(item.tanggal).toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
         const showWatermark = item.level_kode === "Robotic";
@@ -160,6 +166,11 @@ function renderCards(items, containerId) {
         const sourceLabel = item.source === "private" ? "Private" : "Sekolah";
         const title = escapeHtml(item.title);
         const levelKode = escapeHtml(item.level_kode);
+        // Deskripsi singkat robot dari database (kolom deskripsi/description)
+        const description = escapeHtml(item.description);
+        const descHtml = description
+            ? `<p class="card-desc">${description}</p>`
+            : `<p class="card-desc card-desc-empty">Deskripsi robot sedang disiapkan.</p>`;
 
         const mediaDisplay = item.image_url ? `
             <img src="${escapeHtml(item.image_url)}" class="card-img-main" loading="lazy" alt="Ilustrasi ${title}"
@@ -178,6 +189,7 @@ function renderCards(items, containerId) {
                         <span class="level-badge" data-level="${levelKode}">${levelIcon} ${levelKode}</span>
                     </div>
                     <h3 class="card-title">${title}</h3>
+                    ${descHtml}
                     <div class="card-meta">
                         <span class="card-meta-item"><span class="ic" aria-hidden="true">${sourceIcon}</span> ${sourceLabel}</span>
                         <span class="card-meta-item"><span class="ic" aria-hidden="true">📅</span> ${tgl}</span>
@@ -380,29 +392,56 @@ window.openModalExplorer = async (materiId, tanggal, source) => {
     const table = source === "private" ? "materi_private" : "materi";
     const fallbackImg = "https://placehold.co/800x600?text=Robopanda";
 
+    // Data dari cache kartu — deskripsi yang sama dengan yang tampil di kartu
+    // Sumber JAMINAN deskripsi muncul di modal meskipun query DB gagal.
+    const cached = cardsCache.get(materiId) || null;
+
     let data = null;
     try {
-        const res = await supabase.from(table).select("*, levels(kode)").eq("id", materiId).single();
+        // 1) Coba query lengkap dengan join level (untuk badge modal)
+        let res = await supabase.from(table).select("*, levels(kode)").eq("id", materiId).maybeSingle();
+        // 2) Jika join/relasi gagal atau tidak menemukan, fallback ke query polos
+        //    agar deskripsi tetap bisa diambil tanpa ketergantungan join.
+        if (res.error || !res.data) {
+            res = await supabase.from(table).select("*").eq("id", materiId).maybeSingle();
+        }
+        if (res.error) console.warn("[Explorer] Query materi gagal:", res.error);
         data = res.data;
-    } catch (e) { data = null; }
+    } catch (e) {
+        console.warn("[Explorer] Gagal memuat data misi:", e);
+        data = null;
+    }
+
+    // Gabungkan hasil DB dengan cache kartu:
+    // nilai dari DB menang HANYA jika tidak null/kosong, sisanya pakai cache kartu
+    // (data yang persis sama dengan yang tampil di kartu — deskripsi pasti muncul).
+    const merged = { ...(cached || {}) };
+    if (data) {
+        for (const [k, v] of Object.entries(data)) {
+            if (v !== null && v !== undefined && v !== "") merged[k] = v;
+        }
+    }
 
     const imgEl = document.getElementById("modal-image");
     if (imgEl) {
         imgEl.onerror = () => { imgEl.onerror = null; imgEl.src = fallbackImg; };
-        imgEl.src = data && data.image_url ? optimizeCloudinary(data.image_url) : fallbackImg;
+        imgEl.src = merged.image_url ? optimizeCloudinary(merged.image_url) : fallbackImg;
     }
 
-    const levelKode = data?.levels?.kode || "ROBOTIC";
+    const levelKode = merged.levels?.kode || merged.level_kode || "ROBOTIC";
     if (document.getElementById("modal-watermark")) {
         document.getElementById("modal-watermark").style.display = levelKode === "Robotic" ? "block" : "none";
     }
-    if (document.getElementById("modal-title")) document.getElementById("modal-title").textContent = data?.judul || data?.title || "Tanpa judul";
+    if (document.getElementById("modal-title")) document.getElementById("modal-title").textContent = merged.judul || merged.title || "Tanpa judul";
     if (document.getElementById("modal-level")) document.getElementById("modal-level").textContent = levelKode;
     if (document.getElementById("modal-date")) {
         document.getElementById("modal-date").textContent = new Date(tanggal).toLocaleDateString("id-ID", { day:'numeric', month:'long', year:'numeric' });
     }
-    if (document.getElementById("modal-description")) document.getElementById("modal-description").textContent = data?.deskripsi || data?.description || "Belum ada ringkasan untuk misi ini.";
-    if (document.getElementById("modal-detail")) document.getElementById("modal-detail").textContent = data?.detail || "Detail misi sedang disiapkan.";
+    // Deskripsi robot: kolom deskripsi (private) / description (sekolah);
+    // cache kartu sudah menstandarkan keduanya ke field `description`.
+    const descEl = document.getElementById("modal-description");
+    if (descEl) descEl.textContent = merged.deskripsi || merged.description || "Belum ada deskripsi untuk robot ini.";
+    if (document.getElementById("modal-detail")) document.getElementById("modal-detail").textContent = merged.detail || "Detail misi sedang disiapkan.";
 
     if (modal) modal.classList.add("active");
     document.body.style.overflow = "hidden";
